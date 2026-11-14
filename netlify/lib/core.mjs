@@ -3,6 +3,11 @@ import { getStore } from "@netlify/blobs";
 import crypto from "node:crypto";
 
 export const TZ = "Europe/Rome";
+// Legge le variabili d'ambiente impostate su Netlify
+export const env = (k) => {
+  try { const v = globalThis.Netlify?.env?.get(k); if (v) return v; } catch {}
+  return process.env[k] || "";
+};
 const store = () => getStore({ name: "presenze", consistency: "strong" });
 
 export const json = (data, status = 200) =>
@@ -78,7 +83,7 @@ export function validateConfig(cfg) {
 }
 
 // ---------- Sessioni firmate ----------
-const secret = () => process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || "";
+const secret = () => env("SESSION_SECRET") || env("ADMIN_PASSWORD") || "";
 export function signToken(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = crypto.createHmac("sha256", secret()).update(body).digest("base64url");
@@ -98,14 +103,14 @@ export function safeEqual(a, b) {
 }
 
 // ---------- Avvisi Telegram ----------
-export const telegramEnabled = () => !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
+export const telegramEnabled = () => !!(env("TELEGRAM_BOT_TOKEN") && env("TELEGRAM_CHAT_ID"));
 export async function telegram(text) {
   if (!telegramEnabled()) return false;
-  const ids = process.env.TELEGRAM_CHAT_ID.split(",").map((s) => s.trim()).filter(Boolean);
+  const ids = env("TELEGRAM_CHAT_ID").split(",").map((s) => s.trim()).filter(Boolean);
   let ok = true;
   for (const chat_id of ids) {
     try {
-      const r = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      const r = await fetch(`https://api.telegram.org/bot${env("TELEGRAM_BOT_TOKEN")}/sendMessage`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ chat_id, text, parse_mode: "HTML" }),
       });

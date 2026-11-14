@@ -1,7 +1,7 @@
 // API principale: login, timbratura, dati per la dashboard
 import {
   json, romeNow, addDays, evaluate, getConfig, saveConfig, getMonth, saveMonth, validateConfig,
-  signToken, verifyToken, safeEqual, telegram, telegramEnabled, escHtml,
+  signToken, verifyToken, env, safeEqual, telegram, telegramEnabled, escHtml,
 } from "../lib/core.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,8 +53,8 @@ export default async (req) => {
 
 async function login(body) {
   if (body.role === "admin") {
-    if (!process.env.ADMIN_PASSWORD) return json({ error: "Password titolare non configurata sul server (ADMIN_PASSWORD)" }, 500);
-    if (!safeEqual(body.password || "", process.env.ADMIN_PASSWORD)) { await sleep(800); return json({ error: "Password errata" }, 401); }
+    if (!env("ADMIN_PASSWORD")) return json({ error: "Password titolare non configurata sul server (ADMIN_PASSWORD)" }, 500);
+    if (!safeEqual(body.password || "", env("ADMIN_PASSWORD"))) { await sleep(800); return json({ error: "Password errata" }, 401); }
     return json({ token: signToken({ role: "admin", exp: Date.now() + 30 * DAY }), role: "admin" });
   }
   const cfg = await getConfig();
