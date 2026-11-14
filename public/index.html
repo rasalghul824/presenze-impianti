@@ -249,7 +249,7 @@ function viewLogin(){
     </div>
     <form id="loginForm" class="card">
       ${emp ? `<label for="pin">Il tuo PIN</label><input id="pin" name="pin" class="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required autofocus>`
-            : `<label for="pw">Password titolare</label><input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>`}
+            : `<label for="pw">Password titolare</label><input id="pw" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus><label class="check"><input type="checkbox" onchange="pw.type=this.checked?'text':'password'"> Mostra password</label>`}
       <button class="btn pri block big" style="margin-top:14px">Entra</button>
     </form>
     ${DEMO ? `<div class="card small" style="background:var(--warnbg);border-color:#f3dcb2"><b>Modalità demo</b> — dati di prova salvati solo su questo dispositivo.<br>Dipendenti: PIN da <b>1001</b> a <b>1015</b> · Titolare: password <b>admin</b></div>` : ""}
@@ -601,7 +601,7 @@ document.addEventListener("submit", async ev => {
   if (btn){ btn.disabled = true; }
   try {
     if (f.id === "loginForm"){
-      const body = S.loginTab === "employee" ? { role:"employee", pin:f.pin.value.trim() } : { role:"admin", password:f.password.value };
+      const body = S.loginTab === "employee" ? { role:"employee", pin:f.pin.value.trim() } : { role:"admin", password:f.password.value.trim() };
       const r = await api("POST", "/login", body);
       S.token = r.token; S.role = r.role; ls.set("pz_token", r.token); ls.set("pz_role", r.role);
       render(); await boot();

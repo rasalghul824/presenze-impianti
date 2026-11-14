@@ -54,7 +54,7 @@ export default async (req) => {
 async function login(body) {
   if (body.role === "admin") {
     if (!env("ADMIN_PASSWORD")) return json({ error: "Password titolare non configurata sul server (ADMIN_PASSWORD)" }, 500);
-    if (!safeEqual(body.password || "", env("ADMIN_PASSWORD"))) { await sleep(800); return json({ error: "Password errata" }, 401); }
+    if (!safeEqual(String(body.password || "").trim(), env("ADMIN_PASSWORD").trim())) { await sleep(800); return json({ error: "Password errata" }, 401); }
     return json({ token: signToken({ role: "admin", exp: Date.now() + 30 * DAY }), role: "admin" });
   }
   const cfg = await getConfig();
