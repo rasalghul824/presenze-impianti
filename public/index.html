@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Presenze Impianti</title>
+<meta name="theme-color" content="#123a2c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{
+  --bg:#f3f1ea;--card:#fff;--ink:#1b1f1c;--muted:#6b716c;--line:#e4e1d8;
+  --pri:#123a2c;--pri2:#1d5a44;--acc:#f0a500;
+  --ok:#17803d;--okbg:#e5f4ea;--warn:#b45309;--warnbg:#fdf0dc;--bad:#c0262d;--badbg:#fbe5e5;--mutedbg:#efede6;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+h1,h2,h3{margin:0;line-height:1.2}
+.wrap{max-width:980px;margin:0 auto;padding:16px 14px calc(90px + env(safe-area-inset-bottom))}
+.top{background:var(--pri);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;position:sticky;top:0;z-index:20}
+.top .in{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.top h1{font-size:17px;font-weight:650;flex:1;display:flex;align-items:center;gap:8px}
+.top .ic{background:rgba(255,255,255,.12);border:0;border-radius:10px;padding:7px 11px;cursor:pointer;color:#fff}
+.badge-demo{background:var(--acc);color:#2a1d00;font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.3px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.muted{color:var(--muted)} .small{font-size:13px} .tiny{font-size:12px}
+.row{display:flex;gap:10px;align-items:center} .between{justify-content:space-between} .wrapf{flex-wrap:wrap}
+.grid{display:grid;gap:10px}
+.g2{grid-template-columns:repeat(2,1fr)} .g4{grid-template-columns:repeat(2,1fr)}
+@media(min-width:720px){.g4{grid-template-columns:repeat(4,1fr)}.g3m{grid-template-columns:repeat(3,1fr)}}
+.btn{border:1px solid var(--line);background:#fff;border-radius:11px;padding:10px 14px;cursor:pointer;font-weight:600}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.acc{background:var(--acc);border-color:var(--acc);color:#2a1d00}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:9px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.55;cursor:default}
+.big{padding:16px;font-size:17px;border-radius:14px}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+input:focus,select:focus{outline:2px solid var(--pri2);outline-offset:-1px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:650;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.c-ok{background:var(--okbg);color:var(--ok)} .c-warn{background:var(--warnbg);color:var(--warn)} .c-bad{background:var(--badbg);color:var(--bad)} .c-muted{background:var(--mutedbg);color:var(--muted)}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.kpi b{display:block;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12.5px;color:var(--muted);font-weight:600}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:20}
+.tabs button{flex:1;max-width:160px;border:0;background:none;padding:9px 4px 8px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabs button i{font-style:normal;font-size:19px;line-height:1}
+.tabs button.on{color:var(--pri)}
+.seg{display:flex;background:var(--mutedbg);border-radius:11px;padding:3px;gap:3px}
+.seg button{flex:1;white-space:nowrap;border:0;background:none;padding:8px 10px;border-radius:9px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.list>.item{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.list>.item:first-child{border-top:0}
+.item .grow{flex:1;min-width:0}
+.item .name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alert{border-left:4px solid var(--bad);background:var(--badbg)}
+.alert.w{border-left-color:var(--warn);background:var(--warnbg)}
+.bar{height:7px;background:var(--mutedbg);border-radius:99px;overflow:hidden}
+.bar>div{height:100%;border-radius:99px}
+.login{max-width:400px;margin:0 auto;padding:calc(48px + env(safe-area-inset-top)) 18px 40px}
+.brand{text-align:center;margin-bottom:26px}
+.logo{width:64px;height:64px;border-radius:18px;background:var(--pri);color:var(--acc);display:grid;place-items:center;font-size:32px;margin:0 auto 12px}
+.brand h1{font-size:24px}
+.pin{font-size:26px;letter-spacing:10px;text-align:center;font-variant-numeric:tabular-nums}
+.clock{font-size:46px;font-weight:700;letter-spacing:-1px;font-variant-numeric:tabular-nums;line-height:1}
+.status{border-radius:var(--r);padding:16px;text-align:center}
+.status h2{font-size:20px;margin-bottom:4px}
+.hero{background:var(--pri);color:#fff;border:0}
+.hero .muted{color:#c9d8d1}
+.overlay{position:fixed;inset:0;background:rgba(15,25,20,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:720px){.overlay{align-items:center}.sheet{border-radius:20px}}
+.shifts{display:grid;grid-template-columns:44px 1fr;gap:6px 10px;align-items:center}
+.shifts input{padding:8px 10px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td,th{padding:8px 6px;border-top:1px solid var(--line);text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:650;border-top:0}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1b1f1c;color:#fff;padding:11px 16px;border-radius:12px;z-index:99;max-width:92vw;font-weight:550;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.toast.err{background:var(--bad)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+a{color:var(--pri2)}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);font-weight:500;margin:12px 0 0}
+.check input{width:auto}
+</style>
+</head>
+<body>
+<div id="app"><div class="login"><div class="brand"><div class="logo">⛽</div><p class="muted">Caricamento…</p></div></div></div>
+<script>
+"use strict";
+// ================= Utilità =================
+const TZ = "Europe/Rome";
+const WD = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
+const WD_ORDER = [1,2,3,4,5,6,0];
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch {} } };
+const uid = () => Math.random().toString(36).slice(2,10);
+
+function romeNow(d = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",weekday:"short",hour12:false}).formatToParts(d).map(x=>[x.type,x.value]));
+  const hour = p.hour === "24" ? "00" : p.hour;
+  return { date:`${p.year}-${p.month}-${p.day}`, time:`${hour}:${p.minute}:${p.second}`, weekday:{Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.weekday], minutes:+hour*60 + +p.minute + +p.second/60 };
+}
+const toMin = t => { if (!t) return null; const [h,m] = t.split(":").map(Number); return h*60+m; };
+function addDays(ds,n){ const d = new Date(ds+"T12:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+const weekdayOf = ds => new Date(ds+"T12:00:00Z").getUTCDay();
+const fmtDay = ds => `${WD[weekdayOf(ds)]} ${ds.slice(8,10)}/${ds.slice(5,7)}`;
+const fmtMin = m => { m = Math.round(m); return m < 60 ? `${m} min` : `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}`; };
+function distanceM(lat1,lon1,lat2,lon2){ const R=6371000,r=x=>x*Math.PI/180; const a=Math.sin(r(lat2-lat1)/2)**2+Math.cos(r(lat1))*Math.cos(r(lat2))*Math.sin(r(lon2-lon1)/2)**2; return Math.round(2*R*Math.asin(Math.sqrt(a))); }
+function evaluate(emp, station, now, lat, lng, acc){
+  const shift = emp.shifts?.[now.weekday] || null;
+  const distance = station ? distanceM(lat,lng,station.lat,station.lng) : null;
+  const inZone = station ? distance <= (Number(station.radius)||150) + Math.min(acc||0,100) : false;
+  const tolerance = Number(emp.tolerance ?? 5);
+  const delay = shift ? Math.max(0, Math.floor(now.minutes - toMin(shift))) : 0;
+  return { date:now.date, time:now.time.slice(0,5), lat:+(+lat).toFixed(6), lng:+(+lng).toFixed(6), accuracy:Math.round(acc||0), distance, inZone, stationId:station?.id||null, shift, tolerance, delay, late:!!shift && delay>tolerance };
+}
+function validateConfig(cfg){
+  for (const s of cfg.stations){ if(!String(s.name||"").trim()) return "Ogni impianto deve avere un nome"; if(!Number.isFinite(+s.lat)||!Number.isFinite(+s.lng)||Math.abs(s.lat)>90||Math.abs(s.lng)>180) return `Coordinate non valide per ${s.name}`; }
+  const pins = new Set();
+  for (const e of cfg.employees){ if(!String(e.name||"").trim()) return "Ogni dipendente deve avere un nome"; if(!/^\d{4,8}$/.test(String(e.pin||""))) return `PIN di ${e.name}: servono da 4 a 8 cifre`; if(pins.has(String(e.pin))) return `Il PIN ${e.pin} è usato da più dipendenti`; pins.add(String(e.pin)); }
+  return null;
+}
+let toastT;
+function toast(msg, type=""){ document.querySelectorAll(".toast").forEach(t=>t.remove()); const t=document.createElement("div"); t.className="toast "+type; t.textContent=msg; document.body.appendChild(t); clearTimeout(toastT); toastT=setTimeout(()=>t.remove(), 3800); }
+
+// ================= Modalità demo (dati finti nel browser) =================
+const Mock = (() => {
+  const KEY = "presenze_demo_v1"; let db = null;
+  let s = 7; const rnd = () => (s = (s*1103515245+12345) % 2147483648) / 2147483648;
+  const hhmm = m => `${String(Math.floor(m/60)).padStart(2,"0")}:${String(Math.round(m)%60).padStart(2,"0")}`;
+  function seed(){
+    s = 7;
+    const vie = ["Via Roma","Via Aurelia","Via Tiburtina","Via Casilina","Via Appia Nuova","Via Salaria","Via Prenestina","Via Cassia","Via Flaminia","Via Ostiense","Via Nomentana","Via Tuscolana","Via Portuense","Via Laurentina","Via Pontina"];
+    const nomi = ["Marco Rossi","Giulia Bianchi","Luca Ferrari","Sara Russo","Andrea Romano","Francesca Colombo","Matteo Ricci","Chiara Marino","Davide Greco","Elena Bruno","Simone Gallo","Valentina Conti","Alessandro De Luca","Martina Costa","Paolo Giordano"];
+    const stations = vie.map((v,i)=>({ id:"s"+(i+1), name:`Impianto ${i+1}`, address:`${v} ${12+i*7}`, lat:+(41.9+(rnd()-.5)*.3).toFixed(5), lng:+(12.5+(rnd()-.5)*.4).toFixed(5), radius:150 }));
+    const starts = ["06:00","06:30","07:00","14:00"];
+    const employees = nomi.map((n,i)=>{ const shifts={}; for(let w=0;w<7;w++) shifts[w] = (w===0 && i%3!==0) ? null : starts[i%4]; return { id:"e"+(i+1), name:n, pin:String(1001+i), stationId:"s"+(i+1), tolerance:5, shifts }; });
+    const checkins = {}; const now = romeNow();
+    const mk = (e,st,d,shift,offs,out) => { const delay=Math.max(0,offs); return { date:d, time:hhmm(toMin(shift)+offs), lat:st.lat, lng:st.lng, accuracy:12+Math.floor(rnd()*30), distance: out?400+Math.floor(rnd()*1800):Math.floor(rnd()*60), inZone:!out, stationId:st.id, shift, tolerance:5, delay, late:delay>5 }; };
+    employees.forEach((e,i)=>{
+      checkins[e.id] = {}; const st = stations[i];
+      const prop = i%5===0 ? .32 : i%4===0 ? .18 : .06;
+      for (let k=95;k>=1;k--){
+        const d = addDays(now.date,-k), shift = e.shifts[weekdayOf(d)]; if(!shift) continue;
+        const r = rnd();
+        if (r < .03) continue;
+        if (r < .055){ checkins[e.id][d] = { date:d, justified: rnd()<.6 ? "Ferie" : "Malattia" }; continue; }
+        const late = rnd() < prop;
+        const offs = late ? 6+Math.floor(rnd()*rnd()*45) : Math.floor(rnd()*4) - Math.floor(rnd()*14);
+        checkins[e.id][d] = mk(e,st,d,shift,offs,rnd()<.025);
+      }
+      const shift = e.shifts[now.weekday];
+      if (shift && now.minutes > toMin(shift)+5 && i%5!==2){
+        const el = Math.floor(now.minutes-toMin(shift)); const offs = i%6===0 ? Math.min(14, el) : Math.min(el, (i%4)-3);
+        checkins[e.id][now.date] = mk(e,st,now.date,shift,offs,false);
+      }
+    });
+    return { adminPassword:"admin", stations, employees, checkins };
+  }
+  const load = () => { try { db = JSON.parse(ls.get(KEY)); } catch {} if(!db){ db = seed(); save(); } };
+  const save = () => ls.set(KEY, JSON.stringify(db));
+  async function handle(method, fullPath, body = {}, token){
+    if(!db) load();
+    await new Promise(r=>setTimeout(r,180));
+    const path = fullPath.split("?")[0];
+    const fail = m => { throw new Error(m); };
+    if (path === "/login"){
+      if (body.role === "admin"){ if (body.password !== db.adminPassword) fail("Password errata"); return { token:"demo:admin", role:"admin" }; }
+      const e = db.employees.find(x=>x.pin===String(body.pin||"").trim()); if(!e) fail("PIN non valido");
+      return { token:"demo:emp:"+e.id, role:"employee" };
+    }
+    const [, role, id] = String(token||"").split(":");
+    if (role === "emp"){
+      const emp = db.employees.find(x=>x.id===id); if(!emp) fail("Sessione scaduta, accedi di nuovo");
+      const now = romeNow(), st = db.stations.find(x=>x.id===emp.stationId)||null, map = db.checkins[emp.id] ||= {};
+      if (path === "/me"){
+        const from = addDays(now.date,-13);
+        return { now, employee:{ id:emp.id, name:emp.name, tolerance:Number(emp.tolerance??5), shiftToday:emp.shifts?.[now.weekday]||null }, station:st, today:map[now.date]||null, history:Object.values(map).filter(r=>r.date>=from).sort((a,b)=>b.date.localeCompare(a.date)) };
+      }
+      if (path === "/checkin"){
+        if (body.accuracy > 500) fail(`Segnale GPS troppo impreciso (±${Math.round(body.accuracy)} m). Attiva il GPS e riprova.`);
+        if (map[now.date]?.time) fail(`Hai già timbrato oggi alle ${map[now.date].time}`);
+        map[now.date] = { ...(map[now.date]||{}), ...evaluate(emp, st, now, body.lat, body.lng, body.accuracy) }; save();
+        return { ok:true, record:map[now.date] };
+      }
+    }
+    if (role === "admin"){
+      if (path === "/admin/data"){
+        const checkins = []; for (const [empId,m] of Object.entries(db.checkins)) for (const r of Object.values(m)) checkins.push({ ...r, empId });
+        return { config:{ stations:db.stations, employees:db.employees }, checkins, now:romeNow(), telegram:false };
+      }
+      if (path === "/admin/config"){ const err = validateConfig(body); if(err) fail(err); db.stations = body.stations; db.employees = body.employees; save(); return { ok:true }; }
+      if (path === "/admin/justify"){
+        const m = db.checkins[body.empId] ||= {}; const rec = { ...(m[body.date]||{ date:body.date }) };
+        if (body.reason) rec.justified = body.reason; else delete rec.justified;
+        if (!rec.time && !rec.justified) delete m[body.date]; else m[body.date] = rec; save(); return { ok:true };
+      }
+      if (path === "/admin/test-telegram") fail("In modalità demo Telegram non è attivo: funzionerà dopo la pubblicazione.");
+      if (path === "/admin/reset-demo"){ db = seed(); save(); return { ok:true }; }
+    }
+    fail("Non trovato");
+  }
+  return { handle };
+})();
+
+// ================= Collegamento al server =================
+let DEMO = false;
+const S = { token: ls.get("pz_token"), role: ls.get("pz_role"), loginTab:"employee", tab:"oggi", period:30, detail:null, modal:null, me:null, data:null, notified:null };
+async function api(method, path, body){
+  if (DEMO) return Mock.handle(method, path, body, S.token);
+  const r = await fetch("/api"+path, { method, headers:{ "content-type":"application/json", ...(S.token?{ authorization:"Bearer "+S.token }:{}) }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(()=>({ error:"Risposta non valida dal server" }));
+  if (r.status === 401 && path !== "/login"){ logout(); throw new Error(j.error || "Sessione scaduta"); }
+  if (!r.ok) throw new Error(j.error || "Errore");
+  return j;
+}
+async function detect(){
+  try { const r = await fetch("/api/ping", { cache:"no-store" }); const j = await r.json(); DEMO = !j.ok; } catch { DEMO = true; }
+}
+function logout(){ S.token = S.role = null; S.me = S.data = null; S.notified = null; ls.set("pz_token", null); ls.set("pz_role", null); render(); }
+
+// ================= Render principale =================
+const app = $("#app");
+function render(){
+  if (!S.role) app.innerHTML = viewLogin();
+  else if (S.role === "employee") app.innerHTML = S.me ? viewEmployee() : loading();
+  else app.innerHTML = S.data ? viewAdmin() : loading();
+  if (S.modal) app.insertAdjacentHTML("beforeend", viewModal());
+}
+const loading = () => `<div class="login"><div class="brand"><div class="logo">⛽</div><p class="muted"><span class="spin"></span> Caricamento…</p></div></div>`;
+const demoBadge = () => DEMO ? `<span class="badge-demo">DEMO</span>` : "";
+
+// ---------- Login ----------
+function viewLogin(){
+  const emp = S.loginTab === "employee";
+  return `<div class="login">
+    <div class="brand"><div class="logo">⛽</div><h1>Presenze Impianti</h1><p class="muted">Timbratura con orario e posizione</p></div>
+    <div class="seg" style="margin-bottom:16px">
+      <button data-act="loginTab" data-v="employee" class="${emp?"on":""}">Dipendente</button>
+      <button data-act="loginTab" data-v="admin" class="${!emp?"on":""}">Titolare</button>
+    </div>
+    <form id="loginForm" class="card">
+      ${emp ? `<label for="pin">Il tuo PIN</label><input id="pin" name="pin" class="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required autofocus>`
+            : `<label for="pw">Password titolare</label><input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>`}
+      <button class="btn pri block big" style="margin-top:14px">Entra</button>
+    </form>
+    ${DEMO ? `<div class="card small" style="background:var(--warnbg);border-color:#f3dcb2"><b>Modalità demo</b> — dati di prova salvati solo su questo dispositivo.<br>Dipendenti: PIN da <b>1001</b> a <b>1015</b> · Titolare: password <b>admin</b></div>` : ""}
+  </div>`;
+}
+
+// ---------- Vista dipendente ----------
+function viewEmployee(){
+  const { employee:e, station:st, today, history } = S.me;
+  const now = romeNow();
+  let main;
+  if (today?.time){
+    const cls = today.late ? "warn" : "ok";
+    main = `<div class="status" style="background:var(--${cls}bg);color:var(--${cls})">
+      <div style="font-size:34px">${today.late ? "⏰" : "✅"}</div>
+      <h2>Ingresso registrato alle ${today.time}</h2>
+      <div>${today.shift ? (today.late ? `In ritardo di ${today.delay} minuti` : "Sei in orario, buon lavoro!") : "Timbratura fuori turno"}</div>
+      ${!today.inZone ? `<div class="chip c-bad" style="margin-top:8px">📍 Fuori zona: ${today.distance ?? "?"} m dall'impianto</div>` : ""}
+    </div>`;
+  } else if (today?.justified){
+    main = `<div class="status" style="background:var(--mutedbg)"><h2>Giornata giustificata</h2><div class="muted">${esc(today.justified)}</div></div>`;
+  } else {
+    main = `<button id="checkBtn" class="btn acc block big" data-act="checkin" style="font-size:19px;padding:20px">📍 Timbra ingresso</button>
+      <p class="tiny muted" style="text-align:center;margin:8px 0 0">Ti verrà chiesto di consentire l'accesso alla posizione.</p>
+      ${DEMO ? `<label class="check"><input type="checkbox" id="simPos" checked> Demo: simula di essere all'impianto</label>` : ""}`;
+  }
+  const hist = history.filter(r=>r.date!==now.date).slice(0,13).map(r=>`<div class="item"><div class="grow"><div class="name">${fmtDay(r.date)}</div><div class="tiny muted">${r.time ? `Ingresso ${r.time}${r.shift?` · turno ${r.shift}`:""}` : esc(r.justified||"")}</div></div>${chipFor(r)}</div>`).join("");
+  return `<div class="top"><div class="in"><h1>⛽ Presenze ${demoBadge()}</h1><button class="ic" data-act="logout">Esci</button></div></div>
+  <div class="wrap" style="max-width:520px">
+    <div class="card hero">
+      <div class="small muted">Ciao</div><h2 style="font-size:22px;margin-bottom:10px">${esc(e.name)}</h2>
+      <div class="clock" data-clock>${now.time.slice(0,5)}</div>
+      <div class="small muted" style="margin-top:6px">${new Intl.DateTimeFormat("it-IT",{timeZone:TZ,weekday:"long",day:"numeric",month:"long"}).format(new Date())}</div>
+      <div class="grid g2" style="margin-top:14px">
+        <div><div class="tiny muted">Impianto</div><div style="font-weight:650">${esc(st?.name || "Non assegnato")}</div><div class="tiny muted">${esc(st?.address||"")}</div></div>
+        <div><div class="tiny muted">Turno di oggi</div><div style="font-weight:650">${e.shiftToday ? `Ore ${e.shiftToday}` : "Riposo"}</div>${e.shiftToday?`<div class="tiny muted">Tolleranza ${e.tolerance} min</div>`:""}</div>
+      </div>
+    </div>
+    <div class="card">${main}</div>
+    ${hist ? `<div class="card"><h3 style="font-size:15px;margin-bottom:4px">Ultimi giorni</h3><div class="list">${hist}</div></div>` : ""}
+  </div>`;
+}
+function chipFor(r){
+  if (!r) return `<span class="chip c-bad">Assente</span>`;
+  if (r.justified && !r.time) return `<span class="chip c-muted">${esc(r.justified)}</span>`;
+  let h = r.late ? `<span class="chip c-warn">+${r.delay} min</span>` : `<span class="chip c-ok">${r.shift?"Puntuale":"Fuori turno"}</span>`;
+  if (r.inZone === false) h += ` <span class="chip c-bad">Fuori zona</span>`;
+  if (r.justified && r.time) h += ` <span class="chip c-muted">${esc(r.justified)}</span>`;
+  return h;
+}
+function getPos(){
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error("Questo dispositivo non supporta la posizione"));
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy }),
+      e => rej(new Error(e.code === 1 ? "Devi consentire l'accesso alla posizione per timbrare (impostazioni del browser)" : "Posizione non disponibile: attiva il GPS e riprova")),
+      { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+  });
+}
+async function doCheckin(){
+  const btn = $("#checkBtn"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Rilevo la posizione…`;
+  try {
+    let pos;
+    if (DEMO && $("#simPos")?.checked && S.me.station) pos = { lat:S.me.station.lat+0.0004, lng:S.me.station.lng, acc:14 };
+    else pos = await getPos();
+    btn.innerHTML = `<span class="spin"></span> Registro…`;
+    await api("POST", "/checkin", { lat:pos.lat, lng:pos.lng, accuracy:pos.acc });
+    S.me = await api("GET", "/me"); render(); toast("Timbratura registrata");
+  } catch (e) { toast(e.message, "err"); render(); }
+}
+
+// ---------- Vista titolare ----------
+function indexData(){
+  const d = S.data; d.byEmp = {}; d.stById = {};
+  for (const r of d.checkins) (d.byEmp[r.empId] ||= {})[r.date] = r;
+  for (const s of d.config.stations) d.stById[s.id] = s;
+}
+function todayStatus(emp, now = romeNow()){
+  const rec = S.data.byEmp[emp.id]?.[now.date], shift = emp.shifts?.[now.weekday] || null, tol = Number(emp.tolerance ?? 5);
+  if (rec?.justified && !rec.time) return { k:"giust", label:esc(rec.justified), cls:"muted", rec, shift };
+  if (rec?.time) return rec.late ? { k:"late", label:`Ritardo ${rec.delay} min`, cls:"warn", rec, shift } : { k:"ok", label: shift ? "Puntuale" : "Fuori turno", cls:"ok", rec, shift };
+  if (!shift) return { k:"rest", label:"Riposo", cls:"muted", shift };
+  if (now.minutes <= toMin(shift) + tol) return { k:"wait", label:"In attesa", cls:"muted", shift };
+  return { k:"missing", label:`Non timbrato · +${fmtMin(now.minutes - toMin(shift))}`, cls:"bad", shift };
+}
+function computeStats(emp, days, now = romeNow()){
+  const map = S.data.byEmp[emp.id] || {}, tol = Number(emp.tolerance ?? 5);
+  const st = { expected:0, present:0, late:0, absent:0, justified:0, outZone:0, delaySum:0, lateMin:0, series:[] };
+  for (let i = days-1; i >= 0; i--){
+    const d = addDays(now.date, -i), shift = emp.shifts?.[weekdayOf(d)] || null, rec = map[d];
+    if (rec?.justified){ st.justified++; st.series.push({ d, t:"giust", rec }); continue; }
+    if (!shift){ if (rec?.time){ st.present++; if (!rec.inZone) st.outZone++; } st.series.push({ d, t: rec?.time ? "extra" : "rest", rec }); continue; }
+    if (rec?.time){
+      st.expected++; st.present++; st.delaySum += rec.delay;
+      if (rec.late){ st.late++; st.lateMin += rec.delay; }
+      if (!rec.inZone) st.outZone++;
+      st.series.push({ d, t: rec.late ? "late" : "ok", rec });
+    } else if (d === now.date && now.minutes <= toMin(shift) + tol) st.series.push({ d, t:"wait" });
+    else { st.expected++; st.absent++; st.series.push({ d, t:"abs" }); }
+  }
+  const worked = st.expected - st.absent;
+  st.punct = worked > 0 ? Math.round((worked - st.late) / worked * 100) : null;
+  st.avgDelay = st.present ? st.delaySum / st.present : 0;
+  return st;
+}
+function viewAdmin(){
+  const tabs = [["oggi","🕒","Oggi"],["stat","📊","Statistiche"],["imp","⛽","Impianti"],["dip","👥","Dipendenti"],["altro","⚙️","Altro"]];
+  const body = { oggi:tabOggi, stat:tabStat, imp:tabImpianti, dip:tabDipendenti, altro:tabAltro }[S.tab]();
+  return `<div class="top"><div class="in"><h1>⛽ Presenze ${demoBadge()}</h1><button class="ic" data-act="refresh" title="Aggiorna">↻</button></div></div>
+  <div class="wrap">${body}</div>
+  <nav class="tabs">${tabs.map(([k,i,l])=>`<button data-act="tab" data-v="${k}" class="${S.tab===k?"on":""}"><i>${i}</i>${l}</button>`).join("")}</nav>`;
+}
+function tabOggi(){
+  const now = romeNow(), emps = S.data.config.employees;
+  const rows = emps.map(e => ({ e, s: todayStatus(e, now) }));
+  const cnt = k => rows.filter(r => k.includes(r.s.k)).length;
+  const alerts = rows.filter(r => r.s.k === "missing" || r.s.k === "late" || r.s.rec?.inZone === false);
+  const order = { missing:0, late:1, wait:2, ok:3, giust:4, rest:5 };
+  rows.sort((a,b) => order[a.s.k] - order[b.s.k] || (a.s.shift||"99").localeCompare(b.s.shift||"99"));
+  const dateLbl = new Intl.DateTimeFormat("it-IT",{timeZone:TZ,weekday:"long",day:"numeric",month:"long"}).format(new Date());
+  return `<div class="row between" style="margin-bottom:12px"><div><h2 style="font-size:20px;text-transform:capitalize">${dateLbl}</h2><div class="small muted">Aggiornato alle <span data-clock>${now.time.slice(0,5)}</span> · si aggiorna da solo ogni minuto</div></div></div>
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="kpi"><b style="color:var(--ok)">${cnt(["ok"])}</b><span>Puntuali</span></div>
+    <div class="kpi"><b style="color:var(--warn)">${cnt(["late"])}</b><span>In ritardo</span></div>
+    <div class="kpi"><b style="color:var(--bad)">${cnt(["missing"])}</b><span>Non timbrati</span></div>
+    <div class="kpi"><b class="muted">${cnt(["wait"])}</b><span>In attesa · ${cnt(["rest","giust"])} a riposo</span></div>
+  </div>
+  ${alerts.length ? `<div class="card alert"><h3 style="font-size:15px;margin-bottom:6px">🚨 Avvisi di oggi (${alerts.length})</h3>${alerts.map(({e,s}) => `<div class="small" style="padding:3px 0"><b>${esc(e.name)}</b> — ${s.k==="missing" ? `non ha timbrato (turno ${s.shift})` : s.k==="late" ? `arrivato alle ${s.rec.time}, ${s.rec.delay} min di ritardo` : ""}${s.rec?.inZone===false ? `${s.k==="late"?" · ":""}timbrato fuori zona (${s.rec.distance} m)` : ""}</div>`).join("")}</div>`
+                 : `<div class="card" style="background:var(--okbg);border-color:#cde9d6;color:var(--ok)"><b>Nessun avviso</b> — tutto regolare finora.</div>`}
+  ${!S.data.telegram && !DEMO ? `<div class="card alert w small">Gli avvisi su Telegram non sono attivi. Vai su <a href="#" data-act="tab" data-v="altro">Altro</a> per configurarli.</div>` : ""}
+  ${"Notification" in window && Notification.permission === "default" ? `<div class="card row between small"><span>Ricevi una notifica su questo dispositivo quando qualcuno è in ritardo</span><button class="btn sm pri" data-act="notif">Attiva</button></div>` : ""}
+  <div class="card"><div class="list">${rows.map(({e,s}) => {
+    const st = S.data.stById[e.stationId];
+    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(st?.name||"—")} · ${s.shift ? `turno ${s.shift}` : "nessun turno"}${s.rec?.time ? ` · entrato ${s.rec.time}` : ""}${s.rec?.distance!=null && s.rec?.time ? ` · ${s.rec.distance} m` : ""}</div></div>
+      <div style="text-align:right"><span class="chip c-${s.cls}">${s.label}</span>${s.rec?.inZone===false?`<br><span class="chip c-bad" style="margin-top:3px">Fuori zona</span>`:""}
+      ${s.k==="missing" ? `<br><button class="btn sm" style="margin-top:4px" data-act="justify" data-emp="${e.id}" data-date="${now.date}">Giustifica</button>` : ""}</div></div>`;
+  }).join("") || `<p class="muted">Nessun dipendente. Aggiungili dalla scheda Dipendenti.</p>`}</div></div>`;
+}
+const pctColor = p => p == null ? "var(--muted)" : p >= 90 ? "var(--ok)" : p >= 75 ? "var(--warn)" : "var(--bad)";
+function tabStat(){
+  if (S.detail) return statDetail();
+  const emps = S.data.config.employees, now = romeNow();
+  const all = emps.map(e => ({ e, st: computeStats(e, S.period, now) }));
+  const tot = all.reduce((a,{st}) => ({ exp:a.exp+st.expected-st.absent, late:a.late+st.late, abs:a.abs+st.absent, min:a.min+st.lateMin }), { exp:0, late:0, abs:0, min:0 });
+  const punct = tot.exp ? Math.round((tot.exp - tot.late) / tot.exp * 100) : null;
+  all.sort((a,b) => (a.st.punct ?? 101) - (b.st.punct ?? 101) || b.st.absent - a.st.absent);
+  return `<div class="row between wrapf" style="margin-bottom:12px"><h2 style="font-size:20px">Statistiche</h2>
+    <div class="seg" style="min-width:250px">${[7,30,90].map(p=>`<button data-act="period" data-v="${p}" class="${S.period===p?"on":""}">${p} giorni</button>`).join("")}</div></div>
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="kpi"><b style="color:${pctColor(punct)}">${punct ?? "–"}%</b><span>Puntualità media</span></div>
+    <div class="kpi"><b>${tot.late}</b><span>Ritardi</span></div>
+    <div class="kpi"><b>${tot.abs}</b><span>Assenze non giustificate</span></div>
+    <div class="kpi"><b>${fmtMin(tot.min)}</b><span>Tempo perso in ritardi</span></div>
+  </div>
+  <p class="small muted" style="margin:0 0 8px">Ordinati dal meno puntuale. Tocca un nome per il dettaglio.</p>
+  <div class="grid g3m">${all.map(({e,st}) => `<div class="card" style="cursor:pointer;margin:0" data-act="detail" data-v="${e.id}">
+    <div class="row between"><div style="min-width:0"><div class="name" style="font-weight:650">${esc(e.name)}</div><div class="tiny muted">${esc(S.data.stById[e.stationId]?.name||"—")}</div></div>
+    <b style="font-size:22px;color:${pctColor(st.punct)}">${st.punct ?? "–"}${st.punct!=null?"%":""}</b></div>
+    <div class="bar" style="margin:8px 0 10px"><div style="width:${st.punct??0}%;background:${pctColor(st.punct)}"></div></div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:4px;font-size:12.5px">
+      <div><b>${st.late}</b> <span class="muted">ritardi</span></div><div><b>${st.absent}</b> <span class="muted">assenze</span></div><div><b>${fmtMin(st.lateMin)}</b> <span class="muted">persi</span></div>
+    </div></div>`).join("")}</div>`;
+}
+function statDetail(){
+  const e = S.data.config.employees.find(x => x.id === S.detail); if (!e){ S.detail = null; return tabStat(); }
+  const st = computeStats(e, S.period);
+  const ser = st.series, n = ser.length, W = 600, H = 150, bw = W / n;
+  const col = { ok:"#17803d", late:"#e08a00", abs:"#c0262d", giust:"#9aa09b", rest:"#e4e1d8", wait:"#e4e1d8", extra:"#5b8fd6" };
+  const maxD = Math.max(30, ...ser.filter(x=>x.t==="late").map(x=>x.rec.delay));
+  const bars = ser.map((x,i) => {
+    let h = 4; if (x.t==="late") h = Math.max(8, x.rec.delay/maxD*(H-20)); else if (x.t==="abs") h = H-20; else if (x.t==="giust") h = 10; else if (x.t==="rest"||x.t==="wait") h = 2;
+    const tip = `${fmtDay(x.d)}: ${x.t==="late"?`ritardo ${x.rec.delay} min`:x.t==="abs"?"assente":x.t==="ok"?`puntuale (${x.rec.time})`:x.t==="giust"?x.rec.justified:x.t==="extra"?"fuori turno":"riposo"}`;
+    return `<rect x="${(i*bw+bw*.15).toFixed(1)}" y="${H-h}" width="${Math.max(1,bw*.7).toFixed(1)}" height="${h}" rx="1.5" fill="${col[x.t]}"${x.t==="abs"?' opacity=".35"':""}><title>${esc(tip)}</title></rect>`;
+  }).join("");
+  const rows = ser.slice().reverse().filter(x => !["rest","wait"].includes(x.t)).map(x => `<tr><td>${fmtDay(x.d)}</td><td>${x.rec?.shift||e.shifts?.[weekdayOf(x.d)]||"–"}</td><td>${x.rec?.time||"–"}</td><td>${x.t==="abs" ? `<span class="chip c-bad">Assente</span>` : chipFor(x.rec)}</td><td><button class="btn sm" data-act="justify" data-emp="${e.id}" data-date="${x.d}" title="Giustifica">✎</button></td></tr>`).join("");
+  return `<button class="btn sm" data-act="detail" data-v="" style="margin-bottom:10px">← Tutti</button>
+  <div class="row between wrapf" style="margin-bottom:12px"><div><h2 style="font-size:20px">${esc(e.name)}</h2><div class="small muted">${esc(S.data.stById[e.stationId]?.name||"—")} · PIN ${esc(e.pin)} · tolleranza ${e.tolerance??5} min</div></div>
+  <div class="seg" style="min-width:250px">${[7,30,90].map(p=>`<button data-act="period" data-v="${p}" class="${S.period===p?"on":""}">${p} giorni</button>`).join("")}</div></div>
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="kpi"><b style="color:${pctColor(st.punct)}">${st.punct ?? "–"}${st.punct!=null?"%":""}</b><span>Puntualità</span></div>
+    <div class="kpi"><b>${st.present}<span class="muted" style="font-size:15px">/${st.expected}</span></b><span>Presenze su turni</span></div>
+    <div class="kpi"><b>${st.late}</b><span>Ritardi · media ${st.late ? Math.round(st.lateMin/st.late) : 0} min</span></div>
+    <div class="kpi"><b>${st.absent}</b><span>Assenze · ${st.justified} giustificate</span></div>
+  </div>
+  <div class="card"><div class="row between" style="margin-bottom:8px"><h3 style="font-size:15px">Andamento giornaliero</h3><span class="small muted">${fmtMin(st.lateMin)} di ritardo totale · ${st.outZone} fuori zona</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" preserveAspectRatio="none" role="img" aria-label="Ritardi giornalieri">${bars}</svg>
+    <div class="legend" style="margin-top:8px"><span><i style="background:#17803d"></i>Puntuale</span><span><i style="background:#e08a00"></i>Ritardo (altezza = minuti)</span><span><i style="background:#c0262d;opacity:.35"></i>Assente</span><span><i style="background:#9aa09b"></i>Giustificato</span></div>
+  </div>
+  <div class="card" style="overflow-x:auto"><table><thead><tr><th>Giorno</th><th>Turno</th><th>Ingresso</th><th>Esito</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="muted">Nessun dato nel periodo</td></tr>`}</tbody></table></div>`;
+}
+function tabImpianti(){
+  const c = S.data.config;
+  return `<div class="row between" style="margin-bottom:12px"><h2 style="font-size:20px">Impianti (${c.stations.length})</h2><button class="btn pri" data-act="editStation" data-v="">+ Nuovo</button></div>
+  <div class="card"><div class="list">${c.stations.map(s => {
+    const n = c.employees.filter(e => e.stationId === s.id).length;
+    return `<div class="item"><div class="grow"><div class="name">${esc(s.name)}</div><div class="tiny muted">${esc(s.address||"")} · raggio ${s.radius||150} m · ${n} dipendent${n===1?"e":"i"}</div>
+      <a class="tiny" href="https://www.google.com/maps?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Vedi sulla mappa</a></div>
+      <button class="btn sm" data-act="editStation" data-v="${s.id}">Modifica</button></div>`;
+  }).join("") || `<p class="muted">Nessun impianto. Aggiungi il primo: il modo più semplice è andare sul posto e premere "Usa la mia posizione".</p>`}</div></div>`;
+}
+function tabDipendenti(){
+  const c = S.data.config;
+  return `<div class="row between" style="margin-bottom:12px"><h2 style="font-size:20px">Dipendenti (${c.employees.length})</h2><button class="btn pri" data-act="editEmp" data-v="">+ Nuovo</button></div>
+  <div class="card"><div class="list">${c.employees.map(e => {
+    const days = WD_ORDER.filter(w => e.shifts?.[w]); const times = [...new Set(days.map(w => e.shifts[w]))];
+    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(S.data.stById[e.stationId]?.name || "Nessun impianto")} · PIN ${esc(e.pin)}</div>
+      <div class="tiny muted">${days.length ? `${days.map(w=>WD[w]).join(" ")} · ${times.join(" / ")}` : "Nessun turno impostato"}</div></div>
+      <button class="btn sm" data-act="editEmp" data-v="${e.id}">Modifica</button></div>`;
+  }).join("") || `<p class="muted">Nessun dipendente.</p>`}</div></div>`;
+}
+function tabAltro(){
+  const origin = location.origin && location.origin !== "null" ? location.origin : "";
+  return `<h2 style="font-size:20px;margin-bottom:12px">Altro</h2>
+  <div class="card"><h3 style="font-size:15px">Avvisi su Telegram</h3>
+    <p class="small">${DEMO ? "Disponibili dopo la pubblicazione." : S.data.telegram ? `<span class="chip c-ok">Attivi</span> Ricevi un messaggio quando qualcuno arriva in ritardo, timbra fuori zona o non timbra entro l'orario + tolleranza.` : `<span class="chip c-warn">Non configurati</span> Servono le variabili TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID sul server (ti guido io nella pubblicazione).`}</p>
+    <button class="btn sm" data-act="testTg">Invia messaggio di prova</button></div>
+  <div class="card"><h3 style="font-size:15px">Esporta dati</h3><p class="small muted">Scarica un file CSV (apribile con Excel) con tutte le timbrature del periodo.</p>
+    <div class="row wrapf">${[30,90].map(p=>`<button class="btn sm" data-act="csv" data-v="${p}">Ultimi ${p} giorni</button>`).join("")}</div></div>
+  ${origin && !DEMO ? `<div class="card"><h3 style="font-size:15px">Link per i dipendenti</h3><p class="small">Manda questo indirizzo ai dipendenti: lo aprono dal telefono, inseriscono il PIN e possono aggiungerlo alla schermata Home.</p><input readonly value="${esc(origin)}" onclick="this.select()"></div>` : ""}
+  <div class="card small muted"><b style="color:var(--ink)">Privacy</b> — La posizione viene letta solo nel momento in cui il dipendente preme "Timbra", mai in background. Prima dell'uso consegna ai dipendenti un'informativa privacy (GDPR) e verifica gli adempimenti previsti dall'art. 4 dello Statuto dei Lavoratori con il tuo consulente del lavoro.</div>
+  <div class="row wrapf">${DEMO ? `<button class="btn danger" data-act="resetDemo">Rigenera dati demo</button>` : ""}<button class="btn" data-act="logout">Esci</button></div>`;
+}
+
+// ---------- Finestre di modifica ----------
+function viewModal(){
+  const m = S.modal, c = S.data?.config;
+  let inner = "";
+  if (m.type === "station"){
+    const s = c.stations.find(x => x.id === m.id) || { name:"", address:"", lat:"", lng:"", radius:150 };
+    inner = `<h2 style="font-size:19px">${m.id ? "Modifica impianto" : "Nuovo impianto"}</h2>
+    <form id="stationForm">
+      <label>Nome</label><input name="name" value="${esc(s.name)}" required placeholder="Es. Impianto Via Roma">
+      <label>Indirizzo</label><input name="address" value="${esc(s.address||"")}" placeholder="Via, numero, città">
+      <div class="grid g2"><div><label>Latitudine</label><input name="lat" value="${esc(s.lat)}" inputmode="decimal" required placeholder="41.90278"></div><div><label>Longitudine</label><input name="lng" value="${esc(s.lng)}" inputmode="decimal" required placeholder="12.49636"></div></div>
+      <button type="button" class="btn sm" data-act="myPos" style="margin-top:8px">📍 Usa la mia posizione attuale</button>
+      <p class="tiny muted" style="margin:6px 0 0">Oppure su Google Maps tieni premuto sull'impianto e copia i due numeri che compaiono.</p>
+      <label>Raggio di tolleranza (metri)</label><input name="radius" type="number" min="30" max="2000" value="${esc(s.radius||150)}">
+      <div class="row" style="margin-top:16px">${m.id ? `<button type="button" class="btn danger" data-act="delStation">Elimina</button>` : ""}<span style="flex:1"></span><button type="button" class="btn" data-act="closeModal">Annulla</button><button class="btn pri">Salva</button></div>
+    </form>`;
+  } else if (m.type === "emp"){
+    const e = c.employees.find(x => x.id === m.id) || { name:"", pin:String(Math.floor(100000+Math.random()*900000)), stationId:c.stations[0]?.id||"", tolerance:5, shifts:{1:"06:00",2:"06:00",3:"06:00",4:"06:00",5:"06:00",6:"06:00",0:null} };
+    inner = `<h2 style="font-size:19px">${m.id ? "Modifica dipendente" : "Nuovo dipendente"}</h2>
+    <form id="empForm">
+      <label>Nome e cognome</label><input name="name" value="${esc(e.name)}" required>
+      <div class="grid g2"><div><label>PIN (4-8 cifre)</label><input name="pin" value="${esc(e.pin)}" inputmode="numeric" pattern="\\d{4,8}" required></div>
+      <div><label>Tolleranza (minuti)</label><input name="tolerance" type="number" min="0" max="60" value="${esc(e.tolerance??5)}"></div></div>
+      <label>Impianto</label><select name="stationId">${c.stations.map(s=>`<option value="${s.id}" ${s.id===e.stationId?"selected":""}>${esc(s.name)}</option>`).join("")}<option value="" ${!e.stationId?"selected":""}>— Nessuno —</option></select>
+      <label>Orario di inizio turno (lascia vuoto = riposo)</label>
+      <div class="shifts">${WD_ORDER.map(w=>`<b class="small">${WD[w]}</b><input type="time" name="sh${w}" value="${esc(e.shifts?.[w]||"")}">`).join("")}</div>
+      <button type="button" class="btn sm" data-act="copyMon" style="margin-top:8px">Copia orario del lunedì su lun–sab</button>
+      <div class="row" style="margin-top:16px">${m.id ? `<button type="button" class="btn danger" data-act="delEmp">Elimina</button>` : ""}<span style="flex:1"></span><button type="button" class="btn" data-act="closeModal">Annulla</button><button class="btn pri">Salva</button></div>
+    </form>`;
+  } else if (m.type === "justify"){
+    const e = c.employees.find(x => x.id === m.emp), rec = S.data.byEmp[m.emp]?.[m.date];
+    inner = `<h2 style="font-size:19px">Giustifica</h2><p class="small muted">${esc(e?.name)} · ${fmtDay(m.date)}${rec?.time?` · entrato ${rec.time}`:""}</p>
+    <form id="justForm"><label>Motivo</label><input name="reason" list="reasons" value="${esc(rec?.justified||"")}" placeholder="Es. Ferie, Malattia, Permesso">
+      <datalist id="reasons"><option>Ferie</option><option>Malattia</option><option>Permesso</option><option>Cambio turno</option><option>Ritardo autorizzato</option></datalist>
+      <p class="tiny muted">Le giornate giustificate non contano come assenze o ritardi nelle statistiche. Lascia vuoto per togliere la giustificazione.</p>
+      <div class="row" style="margin-top:12px"><span style="flex:1"></span><button type="button" class="btn" data-act="closeModal">Annulla</button><button class="btn pri">Salva</button></div></form>`;
+  }
+  return `<div class="overlay" data-act="overlay"><div class="sheet">${inner}</div></div>`;
+}
+async function saveConfig(cfg){
+  const err = validateConfig(cfg); if (err) throw new Error(err);
+  await api("POST", "/admin/config", { stations:cfg.stations, employees:cfg.employees });
+  await loadAdmin(); S.modal = null; render();
+}
+const cloneCfg = () => JSON.parse(JSON.stringify({ stations:S.data.config.stations, employees:S.data.config.employees }));
+
+// ---------- Caricamento dati e avvisi ----------
+async function loadAdmin(){
+  S.data = await api("GET", "/admin/data?days=92"); indexData(); checkNotify();
+}
+function checkNotify(){
+  const now = romeNow(), keys = [];
+  for (const e of S.data.config.employees){ const s = todayStatus(e, now); if (s.k === "missing" || s.k === "late" || s.rec?.inZone === false) keys.push([`${now.date}:${e.id}:${s.k}`, e, s]); }
+  if (!S.notified){ S.notified = new Set(keys.map(k => k[0])); return; }
+  for (const [k, e, s] of keys){
+    if (S.notified.has(k)) continue; S.notified.add(k);
+    const msg = s.k === "missing" ? `${e.name} non ha ancora timbrato (turno ${s.shift})` : s.k === "late" ? `${e.name} è arrivato con ${s.rec.delay} min di ritardo` : `${e.name} ha timbrato fuori zona`;
+    toast("🚨 " + msg, "err");
+    try { if (Notification.permission === "granted") new Notification("Presenze impianti", { body: msg }); } catch {}
+  }
+}
+function exportCsv(days){
+  const now = romeNow(), rows = [["Data","Dipendente","Impianto","Turno","Ingresso","Ritardo (min)","Esito","Distanza (m)","Fuori zona","Giustificazione"]];
+  for (const e of S.data.config.employees){
+    const st = computeStats(e, days, now);
+    for (const x of st.series){
+      if (x.t === "rest" || x.t === "wait") continue;
+      const r = x.rec || {};
+      rows.push([x.d, e.name, S.data.stById[r.stationId || e.stationId]?.name || "", r.shift || e.shifts?.[weekdayOf(x.d)] || "", r.time || "", r.time ? r.delay : "", { ok:"Puntuale", late:"Ritardo", abs:"Assente", giust:"Giustificato", extra:"Fuori turno" }[x.t], r.distance ?? "", r.inZone === false ? "SI" : "", r.justified || ""]);
+    }
+  }
+  rows.sort((a,b) => a === rows[0] ? -1 : b === rows[0] ? 1 : a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  const csv = "﻿" + rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8" })); a.download = `presenze_${now.date}_${days}gg.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ================= Eventi =================
+document.addEventListener("click", async ev => {
+  const el = ev.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act, v = el.dataset.v;
+  if (act === "overlay"){ if (ev.target === el){ S.modal = null; render(); } return; }
+  if (el.tagName === "A") ev.preventDefault();
+  try {
+    switch (act){
+      case "loginTab": S.loginTab = v; render(); break;
+      case "logout": logout(); break;
+      case "checkin": await doCheckin(); break;
+      case "tab": S.tab = v; S.detail = null; render(); scrollTo(0,0); break;
+      case "refresh": el.innerHTML = `<span class="spin"></span>`; await loadAdmin(); render(); toast("Aggiornato"); break;
+      case "period": S.period = +v; render(); break;
+      case "detail": S.detail = v || null; render(); scrollTo(0,0); break;
+      case "editStation": S.modal = { type:"station", id:v }; render(); break;
+      case "editEmp":
+        if (!S.data.config.stations.length && !v) { toast("Prima aggiungi almeno un impianto", "err"); break; }
+        S.modal = { type:"emp", id:v }; render(); break;
+      case "justify": S.modal = { type:"justify", emp:el.dataset.emp, date:el.dataset.date }; render(); break;
+      case "closeModal": S.modal = null; render(); break;
+      case "myPos": {
+        el.disabled = true; el.innerHTML = `<span class="spin"></span> Rilevo…`;
+        try { const p = await getPos(); const f = $("#stationForm"); f.lat.value = p.lat.toFixed(6); f.lng.value = p.lng.toFixed(6); toast(`Posizione acquisita (±${Math.round(p.acc)} m)`); }
+        finally { el.disabled = false; el.textContent = "📍 Usa la mia posizione attuale"; }
+        break;
+      }
+      case "copyMon": { const f = $("#empForm"); for (const w of [2,3,4,5,6]) f["sh"+w].value = f.sh1.value; break; }
+      case "delStation": {
+        const n = S.data.config.employees.filter(e => e.stationId === S.modal.id).length;
+        if (!confirm(n ? `Eliminare l'impianto? ${n} dipendenti resteranno senza impianto.` : "Eliminare l'impianto?")) break;
+        const cfg = cloneCfg(); cfg.stations = cfg.stations.filter(s => s.id !== S.modal.id); cfg.employees.forEach(e => { if (e.stationId === S.modal.id) e.stationId = ""; });
+        await saveConfig(cfg); toast("Impianto eliminato"); break;
+      }
+      case "delEmp": {
+        if (!confirm("Eliminare il dipendente? Lo storico resterà salvato ma non sarà più visibile.")) break;
+        const cfg = cloneCfg(); cfg.employees = cfg.employees.filter(e => e.id !== S.modal.id); await saveConfig(cfg); toast("Dipendente eliminato"); break;
+      }
+      case "notif": await Notification.requestPermission(); render(); break;
+      case "testTg": await api("POST", "/admin/test-telegram", {}); toast("Messaggio inviato su Telegram"); break;
+      case "csv": exportCsv(+v); break;
+      case "resetDemo": if (confirm("Rigenerare tutti i dati demo?")){ await api("POST", "/admin/reset-demo", {}); await loadAdmin(); render(); toast("Dati demo rigenerati"); } break;
+    }
+  } catch (e) { toast(e.message, "err"); if (act === "refresh") render(); }
+});
+
+document.addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = ev.target, btn = f.querySelector("button:not([type=button])");
+  if (btn){ btn.disabled = true; }
+  try {
+    if (f.id === "loginForm"){
+      const body = S.loginTab === "employee" ? { role:"employee", pin:f.pin.value.trim() } : { role:"admin", password:f.password.value };
+      const r = await api("POST", "/login", body);
+      S.token = r.token; S.role = r.role; ls.set("pz_token", r.token); ls.set("pz_role", r.role);
+      render(); await boot();
+    } else if (f.id === "stationForm"){
+      const cfg = cloneCfg(), id = S.modal.id || "s" + uid();
+      const s = { id, name:f.name.value.trim(), address:f.address.value.trim(), lat:parseFloat(f.lat.value.replace(",", ".")), lng:parseFloat(f.lng.value.replace(",", ".")), radius:Math.max(30, +f.radius.value || 150) };
+      const i = cfg.stations.findIndex(x => x.id === id); i >= 0 ? cfg.stations[i] = s : cfg.stations.push(s);
+      await saveConfig(cfg); toast("Impianto salvato");
+    } else if (f.id === "empForm"){
+      const cfg = cloneCfg(), id = S.modal.id || "e" + uid(), shifts = {};
+      for (let w = 0; w < 7; w++) shifts[w] = f["sh"+w].value || null;
+      const e = { id, name:f.name.value.trim(), pin:f.pin.value.trim(), stationId:f.stationId.value, tolerance:Math.max(0, +f.tolerance.value || 0), shifts };
+      const i = cfg.employees.findIndex(x => x.id === id); i >= 0 ? cfg.employees[i] = e : cfg.employees.push(e);
+      await saveConfig(cfg); toast("Dipendente salvato");
+    } else if (f.id === "justForm"){
+      await api("POST", "/admin/justify", { empId:S.modal.emp, date:S.modal.date, reason:f.reason.value.trim() });
+      await loadAdmin(); S.modal = null; render(); toast("Salvato");
+    }
+  } catch (e) { toast(e.message, "err"); if (btn) btn.disabled = false; }
+});
+
+// Orologio e aggiornamento automatico
+setInterval(() => { const t = romeNow().time.slice(0,5); document.querySelectorAll("[data-clock]").forEach(el => { if (el.textContent !== t) el.textContent = t; }); }, 1000);
+setInterval(async () => {
+  if (document.hidden || S.modal) return;
+  try {
+    if (S.role === "admin" && S.data){ await loadAdmin(); render(); }
+    else if (S.role === "employee" && S.me && !$("#checkBtn")?.disabled){ S.me = await api("GET", "/me"); render(); }
+  } catch {}
+}, 60000);
+
+async function boot(){
+  try {
+    if (S.role === "employee"){ S.me = await api("GET", "/me"); }
+    else if (S.role === "admin"){ await loadAdmin(); }
+  } catch (e) { toast(e.message, "err"); if (!S.me && !S.data) logout(); return; }
+  render();
+}
+(async () => {
+  await detect();
+  if (DEMO && S.token && !S.token.startsWith("demo:")) logout();
+  if (!DEMO && S.token?.startsWith("demo:")) logout();
+  render(); if (S.role) await boot();
+})();
+</script>
+</body>
+</html>
