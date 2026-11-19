@@ -79,6 +79,20 @@ export function validateConfig(cfg) {
     if (pins.has(String(e.pin))) return `Il PIN ${e.pin} è usato da più dipendenti`;
     pins.add(String(e.pin));
   }
+  const badges = new Set();
+  for (const e of cfg.employees) {
+    if (!e.badge) continue;
+    const b = String(e.badge).toUpperCase();
+    if (!/^[0-9A-F]{4,20}$/.test(b)) return `Codice badge di ${e.name} non valido`;
+    if (badges.has(b)) return `Il badge ${b} è assegnato a più dipendenti`;
+    badges.add(b);
+  }
+  const keys = new Set();
+  for (const s of cfg.stations) {
+    if (!s.deviceKey) continue;
+    if (keys.has(s.deviceKey)) return "Due impianti hanno la stessa chiave lettore";
+    keys.add(s.deviceKey);
+  }
   return null;
 }
 

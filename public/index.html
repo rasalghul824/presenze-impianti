@@ -102,6 +102,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch {} } };
 const uid = () => Math.random().toString(36).slice(2,10);
+const genKey = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+const badgeLabel = b => String(b||"").toUpperCase().replace(/(.{2})(?=.)/g, "$1 ");
 
 function romeNow(d = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",weekday:"short",hour12:false}).formatToParts(d).map(x=>[x.type,x.value]));
@@ -126,6 +128,8 @@ function validateConfig(cfg){
   for (const s of cfg.stations){ if(!String(s.name||"").trim()) return "Ogni impianto deve avere un nome"; if(!Number.isFinite(+s.lat)||!Number.isFinite(+s.lng)||Math.abs(s.lat)>90||Math.abs(s.lng)>180) return `Coordinate non valide per ${s.name}`; }
   const pins = new Set();
   for (const e of cfg.employees){ if(!String(e.name||"").trim()) return "Ogni dipendente deve avere un nome"; if(!/^\d{4,8}$/.test(String(e.pin||""))) return `PIN di ${e.name}: servono da 4 a 8 cifre`; if(pins.has(String(e.pin))) return `Il PIN ${e.pin} è usato da più dipendenti`; pins.add(String(e.pin)); }
+  const badges = new Set();
+  for (const e of cfg.employees){ if(!e.badge) continue; const b = String(e.badge).toUpperCase(); if(!/^[0-9A-F]{4,20}$/.test(b)) return `Codice badge di ${e.name} non valido (solo cifre 0-9 e lettere A-F)`; if(badges.has(b)) return `Il badge ${b} è assegnato a più dipendenti`; badges.add(b); }
   return null;
 }
 let toastT;
@@ -140,9 +144,9 @@ const Mock = (() => {
     s = 7;
     const vie = ["Via Roma","Via Aurelia","Via Tiburtina","Via Casilina","Via Appia Nuova","Via Salaria","Via Prenestina","Via Cassia","Via Flaminia","Via Ostiense","Via Nomentana","Via Tuscolana","Via Portuense","Via Laurentina","Via Pontina"];
     const nomi = ["Marco Rossi","Giulia Bianchi","Luca Ferrari","Sara Russo","Andrea Romano","Francesca Colombo","Matteo Ricci","Chiara Marino","Davide Greco","Elena Bruno","Simone Gallo","Valentina Conti","Alessandro De Luca","Martina Costa","Paolo Giordano"];
-    const stations = vie.map((v,i)=>({ id:"s"+(i+1), name:`Impianto ${i+1}`, address:`${v} ${12+i*7}`, lat:+(41.9+(rnd()-.5)*.3).toFixed(5), lng:+(12.5+(rnd()-.5)*.4).toFixed(5), radius:150 }));
+    const stations = vie.map((v,i)=>({ id:"s"+(i+1), name:`Impianto ${i+1}`, address:`${v} ${12+i*7}`, lat:+(41.9+(rnd()-.5)*.3).toFixed(5), lng:+(12.5+(rnd()-.5)*.4).toFixed(5), radius:150, deviceKey: i < 3 ? "demo-chiave-" + (i+1) : undefined }));
     const starts = ["06:00","06:30","07:00","14:00"];
-    const employees = nomi.map((n,i)=>{ const shifts={}; for(let w=0;w<7;w++) shifts[w] = (w===0 && i%3!==0) ? null : starts[i%4]; return { id:"e"+(i+1), name:n, pin:String(1001+i), stationId:"s"+(i+1), tolerance:5, shifts }; });
+    const employees = nomi.map((n,i)=>{ const shifts={}; for(let w=0;w<7;w++) shifts[w] = (w===0 && i%3!==0) ? null : starts[i%4]; return { id:"e"+(i+1), name:n, pin:String(1001+i), stationId:"s"+(i+1), tolerance:5, shifts, badge: i < 12 ? (0xA1B20000 + i*7919).toString(16).toUpperCase() : undefined }; });
     const checkins = {}; const now = romeNow();
     const mk = (e,st,d,shift,offs,out) => { const delay=Math.max(0,offs); return { date:d, time:hhmm(toMin(shift)+offs), lat:st.lat, lng:st.lng, accuracy:12+Math.floor(rnd()*30), distance: out?400+Math.floor(rnd()*1800):Math.floor(rnd()*60), inZone:!out, stationId:st.id, shift, tolerance:5, delay, late:delay>5 }; };
     employees.forEach((e,i)=>{
@@ -163,7 +167,7 @@ const Mock = (() => {
         checkins[e.id][now.date] = mk(e,st,now.date,shift,offs,false);
       }
     });
-    return { adminPassword:"admin", stations, employees, checkins };
+    return { adminPassword:"admin", stations, employees, checkins, unknownBadges:[{ uid:"5C3F9A12", stationId:"s3", at:`${now.date} ${now.time.slice(0,5)}` }] };
   }
   const load = () => { try { db = JSON.parse(ls.get(KEY)); } catch {} if(!db){ db = seed(); save(); } };
   const save = () => ls.set(KEY, JSON.stringify(db));
@@ -172,6 +176,13 @@ const Mock = (() => {
     await new Promise(r=>setTimeout(r,180));
     const path = fullPath.split("?")[0];
     const fail = m => { throw new Error(m); };
+    if (path === "/device/checkin"){
+      const st = db.stations.find(x => x.deviceKey && x.deviceKey === body.key); if (!st) fail("Chiave lettore non valida");
+      const u = String(body.uid||"").toUpperCase(), now = romeNow(), emp = db.employees.find(e => String(e.badge||"").toUpperCase() === u);
+      if (!emp){ db.unknownBadges = [{ uid:u, stationId:st.id, at:`${now.date} ${now.time.slice(0,5)}` }, ...(db.unknownBadges||[]).filter(x=>x.uid!==u)].slice(0,20); save(); return { ok:false, unknown:true }; }
+      const m = db.checkins[emp.id] ||= {}; if (m[now.date]?.time) return { ok:true, already:true, name:emp.name };
+      m[now.date] = { ...(m[now.date]||{}), ...evaluate(emp, st, now, st.lat, st.lng, 0), source:"badge" }; save(); return { ok:true, name:emp.name, ...m[now.date] };
+    }
     if (path === "/login"){
       if (body.role === "admin"){ if (body.password !== db.adminPassword) fail("Password errata"); return { token:"demo:admin", role:"admin" }; }
       const e = db.employees.find(x=>x.pin===String(body.pin||"").trim()); if(!e) fail("PIN non valido");
@@ -195,9 +206,9 @@ const Mock = (() => {
     if (role === "admin"){
       if (path === "/admin/data"){
         const checkins = []; for (const [empId,m] of Object.entries(db.checkins)) for (const r of Object.values(m)) checkins.push({ ...r, empId });
-        return { config:{ stations:db.stations, employees:db.employees }, checkins, now:romeNow(), telegram:false };
+        return { config:{ stations:db.stations, employees:db.employees }, checkins, now:romeNow(), telegram:false, unknownBadges:db.unknownBadges||[] };
       }
-      if (path === "/admin/config"){ const err = validateConfig(body); if(err) fail(err); db.stations = body.stations; db.employees = body.employees; save(); return { ok:true }; }
+      if (path === "/admin/config"){ const err = validateConfig(body); if(err) fail(err); db.stations = body.stations; db.employees = body.employees; const as = new Set(db.employees.map(e=>String(e.badge||"").toUpperCase())); db.unknownBadges = (db.unknownBadges||[]).filter(u=>!as.has(u.uid)); save(); return { ok:true }; }
       if (path === "/admin/justify"){
         const m = db.checkins[body.empId] ||= {}; const rec = { ...(m[body.date]||{ date:body.date }) };
         if (body.reason) rec.justified = body.reason; else delete rec.justified;
@@ -379,11 +390,12 @@ function tabOggi(){
   </div>
   ${alerts.length ? `<div class="card alert"><h3 style="font-size:15px;margin-bottom:6px">🚨 Avvisi di oggi (${alerts.length})</h3>${alerts.map(({e,s}) => `<div class="small" style="padding:3px 0"><b>${esc(e.name)}</b> — ${s.k==="missing" ? `non ha timbrato (turno ${s.shift})` : s.k==="late" ? `arrivato alle ${s.rec.time}, ${s.rec.delay} min di ritardo` : ""}${s.rec?.inZone===false ? `${s.k==="late"?" · ":""}timbrato fuori zona (${s.rec.distance} m)` : ""}</div>`).join("")}</div>`
                  : `<div class="card" style="background:var(--okbg);border-color:#cde9d6;color:var(--ok)"><b>Nessun avviso</b> — tutto regolare finora.</div>`}
+  ${(S.data.unknownBadges||[]).length ? `<div class="card alert w"><h3 style="font-size:15px;margin-bottom:6px">🪪 Badge non associati (${S.data.unknownBadges.length})</h3>${S.data.unknownBadges.slice(0,5).map(u=>`<div class="small" style="padding:2px 0">Badge <b>${badgeLabel(u.uid)}</b> letto a ${esc(S.data.stById[u.stationId]?.name||"?")} · ${esc(u.at.slice(11))} ${u.at.slice(0,10)!==romeNow().date?esc(fmtDay(u.at.slice(0,10))):""}</div>`).join("")}<p class="tiny muted" style="margin:6px 0 0">Vai su <a href="#" data-act="tab" data-v="dip">Dipendenti</a>, apri il dipendente e tocca il badge per assegnarglielo.</p></div>` : ""}
   ${!S.data.telegram && !DEMO ? `<div class="card alert w small">Gli avvisi su Telegram non sono attivi. Vai su <a href="#" data-act="tab" data-v="altro">Altro</a> per configurarli.</div>` : ""}
   ${"Notification" in window && Notification.permission === "default" ? `<div class="card row between small"><span>Ricevi una notifica su questo dispositivo quando qualcuno è in ritardo</span><button class="btn sm pri" data-act="notif">Attiva</button></div>` : ""}
   <div class="card"><div class="list">${rows.map(({e,s}) => {
     const st = S.data.stById[e.stationId];
-    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(st?.name||"—")} · ${s.shift ? `turno ${s.shift}` : "nessun turno"}${s.rec?.time ? ` · entrato ${s.rec.time}` : ""}${s.rec?.distance!=null && s.rec?.time ? ` · ${s.rec.distance} m` : ""}</div></div>
+    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(st?.name||"—")} · ${s.shift ? `turno ${s.shift}` : "nessun turno"}${s.rec?.time ? ` · entrato ${s.rec.time}${s.rec.source==="badge"?" 🪪":""}` : ""}${s.rec?.distance!=null && s.rec?.time ? ` · ${s.rec.distance} m` : ""}</div></div>
       <div style="text-align:right"><span class="chip c-${s.cls}">${s.label}</span>${s.rec?.inZone===false?`<br><span class="chip c-bad" style="margin-top:3px">Fuori zona</span>`:""}
       ${s.k==="missing" ? `<br><button class="btn sm" style="margin-top:4px" data-act="justify" data-emp="${e.id}" data-date="${now.date}">Giustifica</button>` : ""}</div></div>`;
   }).join("") || `<p class="muted">Nessun dipendente. Aggiungili dalla scheda Dipendenti.</p>`}</div></div>`;
@@ -446,6 +458,7 @@ function tabImpianti(){
   <div class="card"><div class="list">${c.stations.map(s => {
     const n = c.employees.filter(e => e.stationId === s.id).length;
     return `<div class="item"><div class="grow"><div class="name">${esc(s.name)}</div><div class="tiny muted">${esc(s.address||"")} · raggio ${s.radius||150} m · ${n} dipendent${n===1?"e":"i"}</div>
+      <div class="tiny" style="margin:2px 0">${s.deviceKey ? `<span class="chip c-ok">🪪 Lettore badge attivo</span>` : `<span class="chip c-muted">Nessun lettore badge</span>`}</div>
       <a class="tiny" href="https://www.google.com/maps?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Vedi sulla mappa</a></div>
       <button class="btn sm" data-act="editStation" data-v="${s.id}">Modifica</button></div>`;
   }).join("") || `<p class="muted">Nessun impianto. Aggiungi il primo: il modo più semplice è andare sul posto e premere "Usa la mia posizione".</p>`}</div></div>`;
@@ -455,7 +468,7 @@ function tabDipendenti(){
   return `<div class="row between" style="margin-bottom:12px"><h2 style="font-size:20px">Dipendenti (${c.employees.length})</h2><button class="btn pri" data-act="editEmp" data-v="">+ Nuovo</button></div>
   <div class="card"><div class="list">${c.employees.map(e => {
     const days = WD_ORDER.filter(w => e.shifts?.[w]); const times = [...new Set(days.map(w => e.shifts[w]))];
-    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(S.data.stById[e.stationId]?.name || "Nessun impianto")} · PIN ${esc(e.pin)}</div>
+    return `<div class="item"><div class="grow"><div class="name">${esc(e.name)}</div><div class="tiny muted">${esc(S.data.stById[e.stationId]?.name || "Nessun impianto")} · PIN ${esc(e.pin)}${e.badge ? ` · 🪪 ${badgeLabel(e.badge)}` : ""}</div>
       <div class="tiny muted">${days.length ? `${days.map(w=>WD[w]).join(" ")} · ${times.join(" / ")}` : "Nessun turno impostato"}</div></div>
       <button class="btn sm" data-act="editEmp" data-v="${e.id}">Modifica</button></div>`;
   }).join("") || `<p class="muted">Nessun dipendente.</p>`}</div></div>`;
@@ -487,6 +500,13 @@ function viewModal(){
       <button type="button" class="btn sm" data-act="myPos" style="margin-top:8px">📍 Usa la mia posizione attuale</button>
       <p class="tiny muted" style="margin:6px 0 0">Oppure su Google Maps tieni premuto sull'impianto e copia i due numeri che compaiono.</p>
       <label>Raggio di tolleranza (metri)</label><input name="radius" type="number" min="30" max="2000" value="${esc(s.radius||150)}">
+      <div class="card" style="margin:14px 0 0;padding:12px;background:var(--mutedbg);border:0">
+        <b class="small">🪪 Chiave del lettore badge</b>
+        <p class="tiny muted" style="margin:4px 0 8px">Copiala nel programma del lettore di questo impianto (riga CHIAVE). Ogni impianto ha la sua.</p>
+        <input name="deviceKey" id="deviceKey" readonly value="${esc(m.key ?? s.deviceKey ?? "")}" placeholder="Nessuna chiave: lettore disattivato" style="font-family:ui-monospace,monospace;font-size:13px">
+        <div class="row wrapf" style="margin-top:8px"><button type="button" class="btn sm" data-act="copyKey">Copia</button><button type="button" class="btn sm" data-act="newKey">${(m.key ?? s.deviceKey) ? "Genera nuova" : "Crea chiave"}</button>${(m.key ?? s.deviceKey) ? `<button type="button" class="btn sm danger" data-act="noKey">Disattiva</button>` : ""}</div>
+        <p class="tiny muted" style="margin:6px 0 0">Se generi una nuova chiave, il vecchio lettore smette di funzionare finché non la aggiorni.</p>
+      </div>
       <div class="row" style="margin-top:16px">${m.id ? `<button type="button" class="btn danger" data-act="delStation">Elimina</button>` : ""}<span style="flex:1"></span><button type="button" class="btn" data-act="closeModal">Annulla</button><button class="btn pri">Salva</button></div>
     </form>`;
   } else if (m.type === "emp"){
@@ -496,6 +516,9 @@ function viewModal(){
       <label>Nome e cognome</label><input name="name" value="${esc(e.name)}" required>
       <div class="grid g2"><div><label>PIN (4-8 cifre)</label><input name="pin" value="${esc(e.pin)}" inputmode="numeric" pattern="\\d{4,8}" required></div>
       <div><label>Tolleranza (minuti)</label><input name="tolerance" type="number" min="0" max="60" value="${esc(e.tolerance??5)}"></div></div>
+      <label>Codice badge (lo trovi nella dashboard dopo averlo passato sul lettore)</label>
+      <input name="badge" id="badgeInput" value="${esc(m.badge ?? e.badge ?? "")}" placeholder="Es. A1B2C3D4 — vuoto = nessun badge" autocapitalize="characters" style="font-family:ui-monospace,monospace">
+      ${(S.data.unknownBadges||[]).length ? `<div class="tiny muted" style="margin-top:6px">Badge letti di recente, tocca per assegnare:</div><div class="row wrapf" style="gap:6px;margin-top:4px">${S.data.unknownBadges.slice(0,6).map(u=>`<button type="button" class="btn sm" data-act="pickBadge" data-v="${esc(u.uid)}">🪪 ${badgeLabel(u.uid)} <span class="muted">· ${esc(S.data.stById[u.stationId]?.name||"")} ${esc(u.at.slice(11))}</span></button>`).join("")}</div>` : ""}
       <label>Impianto</label><select name="stationId">${c.stations.map(s=>`<option value="${s.id}" ${s.id===e.stationId?"selected":""}>${esc(s.name)}</option>`).join("")}<option value="" ${!e.stationId?"selected":""}>— Nessuno —</option></select>
       <label>Orario di inizio turno (lascia vuoto = riposo)</label>
       <div class="shifts">${WD_ORDER.map(w=>`<b class="small">${WD[w]}</b><input type="time" name="sh${w}" value="${esc(e.shifts?.[w]||"")}">`).join("")}</div>
@@ -549,6 +572,7 @@ function exportCsv(days){
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8" })); a.download = `presenze_${now.date}_${days}gg.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 
+function restoreDraft(){ const d = S.modal?.draft, f = $("#stationForm"); if (!d || !f) return; for (const [k,val] of Object.entries(d)) if (k !== "deviceKey" && f[k]) f[k].value = val; }
 // ================= Eventi =================
 document.addEventListener("click", async ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
@@ -576,6 +600,10 @@ document.addEventListener("click", async ev => {
         finally { el.disabled = false; el.textContent = "📍 Usa la mia posizione attuale"; }
         break;
       }
+      case "copyKey": { const k = $("#deviceKey").value; if (!k) { toast("Prima crea la chiave", "err"); break; } try { await navigator.clipboard.writeText(k); toast("Chiave copiata"); } catch { $("#deviceKey").select(); toast("Seleziona e copia la chiave a mano"); } break; }
+      case "newKey": { const f = $("#stationForm"); S.modal.draft = Object.fromEntries(new FormData(f)); S.modal.key = genKey(); render(); restoreDraft(); toast("Chiave creata: ricordati di premere Salva"); break; }
+      case "noKey": { const f = $("#stationForm"); S.modal.draft = Object.fromEntries(new FormData(f)); S.modal.key = ""; render(); restoreDraft(); break; }
+      case "pickBadge": { $("#badgeInput").value = v; toast("Badge inserito: premi Salva"); break; }
       case "copyMon": { const f = $("#empForm"); for (const w of [2,3,4,5,6]) f["sh"+w].value = f.sh1.value; break; }
       case "delStation": {
         const n = S.data.config.employees.filter(e => e.stationId === S.modal.id).length;
@@ -608,12 +636,14 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "stationForm"){
       const cfg = cloneCfg(), id = S.modal.id || "s" + uid();
       const s = { id, name:f.name.value.trim(), address:f.address.value.trim(), lat:parseFloat(f.lat.value.replace(",", ".")), lng:parseFloat(f.lng.value.replace(",", ".")), radius:Math.max(30, +f.radius.value || 150) };
+      if (f.deviceKey.value) s.deviceKey = f.deviceKey.value;
       const i = cfg.stations.findIndex(x => x.id === id); i >= 0 ? cfg.stations[i] = s : cfg.stations.push(s);
       await saveConfig(cfg); toast("Impianto salvato");
     } else if (f.id === "empForm"){
       const cfg = cloneCfg(), id = S.modal.id || "e" + uid(), shifts = {};
       for (let w = 0; w < 7; w++) shifts[w] = f["sh"+w].value || null;
       const e = { id, name:f.name.value.trim(), pin:f.pin.value.trim(), stationId:f.stationId.value, tolerance:Math.max(0, +f.tolerance.value || 0), shifts };
+      const b = f.badge.value.toUpperCase().replace(/[^0-9A-F]/g, ""); if (b) e.badge = b;
       const i = cfg.employees.findIndex(x => x.id === id); i >= 0 ? cfg.employees[i] = e : cfg.employees.push(e);
       await saveConfig(cfg); toast("Dipendente salvato");
     } else if (f.id === "justForm"){

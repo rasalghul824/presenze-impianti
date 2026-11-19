@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Guida lettore badge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Banco di lavoro scuro: scena 3D in alto, scheda istruzioni sotto (a destra su schermi larghi) */
+  --bg:#111517; --panel:#1a2023; --line:#2c363a; --ink:#e9eef0; --muted:#93a1a6; --acc:#f2a900; --bad:#e5533d;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font)}
+.app{height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto}
+@media(min-width:900px){.app{grid-template-columns:minmax(0,1fr) 410px;grid-template-rows:100%}}
+#stage{position:relative;min-height:0;overflow:hidden}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.hud{position:absolute;left:12px;top:12px;font:500 12px var(--mono);color:var(--muted);background:rgba(17,21,23,.78);padding:5px 9px;border-radius:6px;pointer-events:none}
+.load{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font:500 14px var(--mono)}
+.panel{background:var(--panel);border-top:1px solid var(--line);padding:14px 16px 16px;max-height:48vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+@media(min-width:900px){.panel{max-height:none;border-top:0;border-left:1px solid var(--line);padding:22px 22px 20px}}
+.prog{display:flex;gap:3px}
+.prog button{flex:1;height:6px;padding:0;border-radius:3px;background:var(--line);border:0;min-width:0}
+.prog button.on{background:var(--acc)}
+.prog button.cur{background:#fff}
+.kicker{font:600 12px var(--mono);color:var(--acc);letter-spacing:.05em;text-transform:uppercase}
+h1{font-size:21px;margin:0;text-wrap:balance;line-height:1.25}
+.body{color:#cfd8db;display:flex;flex-direction:column;gap:8px}
+.body p{margin:0}
+.body ul,.body ol{margin:0;padding-left:20px}
+.body li{margin:2px 0}
+.conn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0f1416;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:600 14.5px var(--mono)}
+.dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.18)}
+.arrow{color:var(--muted)}
+.dev{color:var(--muted);font-weight:500}
+.warn{border-left:3px solid var(--bad);background:rgba(229,83,61,.1);padding:8px 10px;border-radius:6px;font-size:14px}
+.tip{border-left:3px solid var(--acc);background:rgba(242,169,0,.08);padding:8px 10px;border-radius:6px;font-size:14px}
+.nav{display:flex;gap:8px;margin-top:auto;padding-top:4px}
+button{font:600 15px var(--font);border-radius:10px;border:1px solid var(--line);background:#232b2f;color:var(--ink);padding:11px 14px;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#1d1600;flex:1}
+button.sm{padding:7px 11px;font-size:13.5px}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button:disabled{opacity:.35;cursor:default}
+table{border-collapse:collapse;font:500 13px var(--mono);width:100%}
+td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:middle}
+td:first-child{width:18px}
+.mono{font-family:var(--mono)}
+b.k{font-family:var(--mono);background:#0f1416;border:1px solid var(--line);border-radius:5px;padding:0 5px;font-weight:600}
+.toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--acc);color:#1d1600;font-weight:600;padding:8px 14px;border-radius:9px;font-size:14px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="stage"><div class="load" id="load">Preparo il banco di lavoro…</div><div class="hud" id="hud">Trascina per ruotare · pizzica per ingrandire</div></div>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</div>
+<script type="text/plain" id="sketch">/*
+  LETTORE BADGE PRESENZE — un lettore per ogni impianto
+  -----------------------------------------------------
+  Componenti: ESP32 DevKit V1 (30 pin) + lettore RFID RC522 + cicalino attivo
+
+  COLLEGAMENTI (cavetti femmina-femmina):
+    RC522 3.3V -> ESP32 3V3        (MAI al pin VIN/5V: il lettore si brucia)
+    RC522 RST  -> ESP32 D22
+    RC522 GND  -> ESP32 GND (lato destro, vicino a 3V3)
+    RC522 IRQ  -> non collegato
+    RC522 MISO -> ESP32 D19
+    RC522 MOSI -> ESP32 D23
+    RC522 SCK  -> ESP32 D18
+    RC522 SDA  -> ESP32 D5
+    Cicalino +  -> ESP32 D4   (gamba lunga / segno +)
+    Cicalino -  -> ESP32 GND (lato sinistro, vicino a VIN)
+
+  SUONI:
+    1 bip lungo   = timbratura registrata
+    2 bip corti   = niente internet: la timbratura è in memoria e verrà inviata dopo
+    3 bip corti   = badge non associato o chiave sbagliata (guarda la dashboard)
+
+  Libreria necessaria (Arduino IDE > Gestione librerie): "MFRC522" di GithubCommunity
+  Scheda (Arduino IDE > Gestore schede): "esp32" di Espressif, poi scegli "ESP32 Dev Module"
+*/
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+// ===================== DA COMPILARE PER OGNI IMPIANTO =====================
+const char* WIFI_NOME     = "NOME-DEL-WIFI";
+const char* WIFI_PASSWORD = "PASSWORD-DEL-WIFI";
+const char* CHIAVE        = "INCOLLA-QUI-LA-CHIAVE-DELL-IMPIANTO";
+const char* SITO          = "https://kaleidoscopic-pegasus-6d3541.netlify.app";  // indirizzo del tuo sito
+// ==========================================================================
+
+#define PIN_SS   5
+#define PIN_RST  22
+#define PIN_BUZ  4
+
+MFRC522 rfid(PIN_SS, PIN_RST);
+
+// Coda delle timbrature non ancora inviate (es. internet assente)
+struct Timbratura { String uid; unsigned long letto; };
+const int MAX_CODA = 40;
+Timbratura coda[MAX_CODA];
+int nCoda = 0;
+
+String ultimoUid = "";
+unsigned long ultimoMs = 0;
+unsigned long ultimoTentativo = 0;
+
+void bip(int volte, int durata) {
+  for (int i = 0; i < volte; i++) {
+    digitalWrite(PIN_BUZ, HIGH); delay(durata);
+    digitalWrite(PIN_BUZ, LOW);  delay(90);
+  }
+}
+
+// 1 = registrata, 0 = riprova più tardi, -1 = rifiutata (badge sconosciuto o chiave errata)
+int invia(const Timbratura& t) {
+  if (WiFi.status() != WL_CONNECTED) return 0;
+  WiFiClientSecure client;
+  client.setInsecure();               // connessione cifrata senza controllo certificato
+  HTTPClient http;
+  http.setTimeout(8000);
+  if (!http.begin(client, String(SITO) + "/api/device/checkin")) return 0;
+  http.addHeader("Content-Type", "application/json");
+  unsigned long secondiFa = (millis() - t.letto) / 1000;
+  String corpo = String("{\"key\":\"") + CHIAVE + "\",\"uid\":\"" + t.uid + "\",\"ago\":" + secondiFa + "}";
+  int codice = http.POST(corpo);
+  String risposta = http.getString();
+  http.end();
+  Serial.printf("Invio badge %s -> %d %s\n", t.uid.c_str(), codice, risposta.c_str());
+  if (codice == 200) return 1;
+  if (codice == 400 || codice == 401 || codice == 404) return -1;
+  return 0;
+}
+
+void mettiInCoda(const Timbratura& t) {
+  if (nCoda >= MAX_CODA) {            // coda piena: scarta la più vecchia
+    for (int i = 1; i < MAX_CODA; i++) coda[i - 1] = coda[i];
+    nCoda--;
+  }
+  coda[nCoda++] = t;
+}
+
+void svuotaCoda() {
+  while (nCoda > 0) {
+    int r = invia(coda[0]);
+    if (r == 0) return;               // ancora niente internet: riprova dopo
+    for (int i = 1; i < nCoda; i++) coda[i - 1] = coda[i];
+    nCoda--;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_BUZ, OUTPUT);
+  digitalWrite(PIN_BUZ, LOW);
+
+  SPI.begin();                        // SCK=18, MISO=19, MOSI=23
+  rfid.PCD_Init();
+  Serial.print("Lettore RC522 versione: 0x");
+  Serial.println(rfid.PCD_ReadRegister(MFRC522::VersionReg), HEX);  // 0x91 o 0x92 = collegato bene
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_NOME, WIFI_PASSWORD);
+  Serial.print("Connessione al WiFi");
+  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) { delay(250); Serial.print("."); }
+  Serial.println(WiFi.status() == WL_CONNECTED ? " collegato!" : " non riuscita (riprovo in automatico)");
+
+  bip(1, 60); delay(120); bip(1, 60);  // due bip all'accensione = pronto
+}
+
+void loop() {
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    String uid = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      if (rfid.uid.uidByte[i] < 0x10) uid += "0";
+      uid += String(rfid.uid.uidByte[i], HEX);
+    }
+    uid.toUpperCase();
+    rfid.PICC_HaltA();
+    rfid.PCD_StopCrypto1();
+
+    // ignora lo stesso badge passato di nuovo entro 5 secondi
+    if (uid == ultimoUid && millis() - ultimoMs < 5000) return;
+    ultimoUid = uid; ultimoMs = millis();
+    Serial.println("Badge letto: " + uid);
+
+    Timbratura t = { uid, millis() };
+    int r = invia(t);
+    if (r == 1)       bip(1, 400);
+    else if (r == -1) bip(3, 100);
+    else { mettiInCoda(t); bip(2, 100); }
+  }
+
+  // ogni 15 secondi riprova a inviare quelle rimaste in coda
+  if (nCoda > 0 && millis() - ultimoTentativo > 15000) {
+    ultimoTentativo = millis();
+    svuotaCoda();
+  }
+  delay(50);
+}
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+stage.prepend(renderer.domElement);
+document.getElementById("load").remove();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111517);
+scene.fog = new THREE.Fog(0x111517, 30, 60);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+camera.position.set(1, 12, 14);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minDistance = 2.5;
+controls.maxDistance = 40;
+controls.target.set(0.5, 1, 0);
+
+scene.add(new THREE.HemisphereLight(0xeef4ff, 0x1d2622, 1.25));
+const sun = new THREE.DirectionalLight(0xffffff, 1.7); sun.position.set(6, 14, 9); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xbfd4ff, 0.5); fill.position.set(-8, 6, -6); scene.add(fill);
+
+// ---------- utilità ----------
+function canvasTex(w, h, draw) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); draw(g, w, h);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return { tex, c, g };
+}
+function label(text, { color = "#ffffff", bg = "rgba(15,20,22,.9)", border = null, h = 0.42 } = {}) {
+  const fs = 64, pad = 22;
+  const m = document.createElement("canvas").getContext("2d"); m.font = `600 ${fs}px "IBM Plex Mono", monospace`;
+  const w = Math.ceil(m.measureText(text).width) + pad * 2, hh = fs + pad * 1.4;
+  const { tex } = canvasTex(w, hh, (g) => {
+    g.fillStyle = bg; g.beginPath(); g.roundRect(3, 3, w - 6, hh - 6, 18); g.fill();
+    if (border) { g.lineWidth = 6; g.strokeStyle = border; g.stroke(); }
+    g.font = `600 ${fs}px "IBM Plex Mono", monospace`; g.fillStyle = color; g.textBaseline = "middle"; g.fillText(text, pad, hh / 2 + 3);
+  });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(h * w / hh, h, 1); sp.renderOrder = 20; return sp;
+}
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.05, ...o });
+const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => { x = clamp01(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- tappetino da lavoro ----------
+{
+  const { tex } = canvasTex(1024, 768, (g, w, h) => {
+    g.fillStyle = "#26332f"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "rgba(255,255,255,.06)"; g.lineWidth = 1;
+    for (let x = 0; x < w; x += 25.6) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    for (let y = 0; y < h; y += 25.6) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    g.strokeStyle = "rgba(255,255,255,.12)"; g.lineWidth = 2;
+    for (let x = 0; x < w; x += 128) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    for (let y = 0; y < h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+  m.rotation.x = -Math.PI / 2; m.position.set(1, 0, 0); scene.add(m);
+}
+
+const bench = new THREE.Group(); scene.add(bench);
+
+// ---------- ESP32 DevKit V1 (30 pin) ----------
+const ESP_POS = V(-2.4, 2.2, 0), ESP_W = 2.8, ESP_L = 5.2;
+const PINS_L = ["EN","VP","VN","D34","D35","D32","D33","D25","D26","D27","D14","D12","D13","GND","VIN"];
+const PINS_R = ["D23","D22","TX0","RX0","D21","D19","D18","D5","TX2","RX2","D4","D2","D15","GND","3V3"];
+const pinZ = (i) => (i - 7) * 0.254 + 0.45, PX = 1.14;
+const espPinLocal = {};
+PINS_L.forEach((n, i) => espPinLocal["L:" + n] = V(-PX, 0, pinZ(i)));
+PINS_R.forEach((n, i) => espPinLocal["R:" + n] = V(PX, 0, pinZ(i)));
+const USED_ESP = new Set(["R:3V3","R:GND","R:D22","R:D19","R:D23","R:D18","R:D5","R:D4","L:GND"]);
+
+const esp = new THREE.Group(); esp.position.copy(ESP_POS); bench.add(esp);
+{
+  const S = 200, W = ESP_W * S, H = ESP_L * S;
+  const { tex } = canvasTex(W, H, (g) => {
+    g.fillStyle = "#152230"; g.fillRect(0, 0, W, H);
+    g.strokeStyle = "rgba(120,170,220,.18)"; g.lineWidth = 3;
+    for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(140 + i * 30, 900); g.lineTo(140 + i * 30, 640 - i * 12); g.lineTo(260, 560); g.stroke(); }
+    const toC = (v) => [(v.x + ESP_W / 2) * S, (v.z + ESP_L / 2) * S];
+    g.textBaseline = "middle";
+    for (const [k, v] of Object.entries(espPinLocal)) {
+      const [x, y] = toC(v), used = USED_ESP.has(k), name = k.slice(2);
+      g.fillStyle = "#d6b25a"; g.beginPath(); g.arc(x, y, 17, 0, 7); g.fill();
+      g.fillStyle = "#152230"; g.beginPath(); g.arc(x, y, 8, 0, 7); g.fill();
+      g.font = `${used ? 700 : 500} ${used ? 34 : 28}px "IBM Plex Mono", monospace`;
+      g.fillStyle = used ? "#ffffff" : "rgba(255,255,255,.55)";
+      if (k[0] === "L") { g.textAlign = "left"; g.fillText(name, x + 30, y); } else { g.textAlign = "right"; g.fillText(name, x - 30, y); }
+    }
+    g.textAlign = "center"; g.fillStyle = "rgba(255,255,255,.75)"; g.font = `600 30px "IBM Plex Mono", monospace`;
+    g.fillText("ESP32 DEVKIT V1", W / 2, 640);
+    g.font = `600 26px "IBM Plex Mono", monospace`; g.fillText("EN", 90, 935); g.fillText("BOOT", W - 100, 935);
+  });
+  const side = mat(0x101820);
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(ESP_W, 0.16, ESP_L), [side, side, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 }), side, side, side]);
+  esp.add(pcb);
+  const can = box(1.75, 0.28, 2.2, mat(0xc9ced4, { metalness: 0.75, roughness: 0.3 })); can.position.set(0, 0.22, -1.25); esp.add(can);
+  const { tex: canTex } = canvasTex(350, 440, (g, w, h) => { g.fillStyle = "#c9ced4"; g.fillRect(0, 0, w, h); g.fillStyle = "#4b5258"; g.font = '600 30px "IBM Plex Mono", monospace'; g.textAlign = "center"; g.fillText("ESP32-WROOM-32", w / 2, h / 2); g.font = '500 22px "IBM Plex Mono", monospace'; g.fillText("WiFi · Bluetooth", w / 2, h / 2 + 38); });
+  const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.15), new THREE.MeshStandardMaterial({ map: canTex, metalness: 0.4, roughness: 0.4 })); lab.rotation.x = -Math.PI / 2; lab.position.set(0, 0.365, -1.25); esp.add(lab);
+  const ant = box(1.75, 0.02, 0.5, mat(0x152230)); ant.position.set(0, 0.09, -2.55); esp.add(ant);
+  const usb = box(0.75, 0.28, 0.55, mat(0xb8bec4, { metalness: 0.8, roughness: 0.3 })); usb.position.set(0, 0.2, 2.42); esp.add(usb);
+  for (const x of [-0.9, 0.9]) { const b = box(0.35, 0.16, 0.3, mat(0x9aa0a6, { metalness: 0.5 })); b.position.set(x, 0.14, 2.05); esp.add(b); const k = box(0.18, 0.08, 0.14, mat(0x222222)); k.position.set(x, 0.25, 2.05); esp.add(k); }
+  for (const s of [-1, 1]) {
+    const hdr = box(0.25, 0.25, 15 * 0.254, mat(0x141414)); hdr.position.set(s * PX, -0.205, 0.45); esp.add(hdr);
+  }
+  const pinM = mat(0xd9b65c, { metalness: 0.85, roughness: 0.3 }), pinG = new THREE.BoxGeometry(0.064, 0.6, 0.064);
+  for (const v of Object.values(espPinLocal)) { const p = new THREE.Mesh(pinG, pinM); p.position.set(v.x, -0.38, v.z); esp.add(p); }
+}
+scene.updateMatrixWorld(true);
+const espPinTip = (k) => esp.localToWorld(espPinLocal[k].clone().setY(-0.68));
+
+// ---------- Lettore RFID RC522 ----------
+const RC_POS = V(3.6, 0.1, 0.4);
+const RC_PINS = ["SDA","SCK","MOSI","MISO","IRQ","GND","RST","3.3V"];
+const rcPinZ = (j) => (j - 3.5) * 0.254;
+const rc = new THREE.Group(); rc.position.copy(RC_POS); bench.add(rc);
+{
+  const S = 200, W = 6 * S, H = 4 * S;
+  const { tex } = canvasTex(W, H, (g) => {
+    g.fillStyle = "#1d5ea6"; g.fillRect(0, 0, W, H);
+    g.strokeStyle = "rgba(225,235,245,.55)"; g.lineWidth = 7;
+    for (let i = 0; i < 4; i++) { g.beginPath(); g.roundRect(470 + i * 26, 70 + i * 26, 660 - i * 52, 660 - i * 52, 40); g.stroke(); }
+    g.fillStyle = "#111"; g.fillRect(250, 300, 150, 150);
+    g.fillStyle = "rgba(255,255,255,.7)"; g.font = '600 26px "IBM Plex Mono", monospace'; g.textAlign = "center"; g.fillText("RC522", 325, 490);
+    g.textAlign = "left"; g.textBaseline = "middle";
+    RC_PINS.forEach((n, j) => {
+      const y = (rcPinZ(j) + 2) * S;
+      g.fillStyle = "#d6b25a"; g.beginPath(); g.arc(34, y, 15, 0, 7); g.fill();
+      g.fillStyle = "#1d5ea6"; g.beginPath(); g.arc(34, y, 7, 0, 7); g.fill();
+      g.fillStyle = n === "IRQ" ? "rgba(255,255,255,.5)" : "#fff"; g.font = '700 32px "IBM Plex Mono", monospace'; g.fillText(n, 66, y);
+    });
+    g.fillStyle = "rgba(255,255,255,.55)"; g.font = '500 26px "IBM Plex Mono", monospace'; g.fillText("13.56 MHz", 900, 760);
+  });
+  const side = mat(0x174b85);
+  rc.add(new THREE.Mesh(new THREE.BoxGeometry(6, 0.16, 4), [side, side, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 }), side, side, side]));
+  const hdr = box(0.25, 0.25, 8 * 0.254, mat(0x141414)); hdr.position.set(-2.88, 0.2, 0); rc.add(hdr);
+  const pinM = mat(0xd9b65c, { metalness: 0.85, roughness: 0.3 }), pinG = new THREE.BoxGeometry(0.6, 0.064, 0.064);
+  RC_PINS.forEach((n, j) => { const p = new THREE.Mesh(pinG, pinM); p.position.set(-3.2, 0.2, rcPinZ(j)); rc.add(p); });
+}
+const rcPinTip = (n) => rc.localToWorld(V(-3.5, 0.2, rcPinZ(RC_PINS.indexOf(n))));
+
+// ---------- Cicalino attivo ----------
+const BZ_POS = V(-6.4, 0, 1.0);
+const bz = new THREE.Group(); bz.position.copy(BZ_POS); bench.add(bz);
+{
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.9, 40), mat(0x161616, { roughness: 0.4 })); body.position.y = 2.45; bz.add(body);
+  const { tex } = canvasTex(256, 256, (g, w, h) => { g.fillStyle = "#f4f4f4"; g.beginPath(); g.arc(128, 128, 126, 0, 7); g.fill(); g.fillStyle = "#111"; g.beginPath(); g.arc(128, 128, 22, 0, 7); g.fill(); g.font = '700 70px "IBM Plex Mono", monospace'; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("+", 200, 128); });
+  const top = new THREE.Mesh(new THREE.CircleGeometry(0.58, 40), new THREE.MeshStandardMaterial({ map: tex, transparent: true })); top.rotation.x = -Math.PI / 2; top.position.y = 2.905; bz.add(top);
+  const legM = mat(0xc9ced4, { metalness: 0.8, roughness: 0.3 });
+  const lp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8), legM); lp.position.set(0.25, 1.6, 0); bz.add(lp);
+  const ln = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6), legM); ln.position.set(-0.25, 1.7, 0); bz.add(ln);
+}
+const bzLeg = (s) => bz.localToWorld(V(s === "+" ? 0.25 : -0.25, s === "+" ? 1.2 : 1.4, 0));
+
+scene.updateMatrixWorld(true);
+// ---------- cavetti dupont ----------
+const housingM = mat(0x1b1b1b, { roughness: 0.5 });
+class Wire {
+  constructor({ color, a, b, aDir, lift = 0, sway = 0 }) {
+    // a = punta del pin di partenza, aDir = verso in cui esce il connettore ("x" orizzontale verso -x, "y" verticale verso il basso)
+    this.color = color;
+    const A = a.clone(), B = b.clone();
+    this.ha = box(aDir === "x" ? 1.4 : 0.25, aDir === "x" ? 0.25 : 1.4, 0.25, housingM);
+    this.hb = box(0.25, 1.4, 0.25, housingM);
+    let S;
+    if (aDir === "x") { this.haPos = V(A.x - 0.2, A.y, A.z); this.haOff = V(-0.9, 0, 0); S = V(A.x - 0.9, A.y, A.z); }
+    else { this.haPos = V(A.x, A.y - 0.2, A.z); this.haOff = V(0, -0.9, 0); S = V(A.x, A.y - 0.9, A.z); }
+    this.hbPos = V(B.x, B.y - 0.2, B.z); this.hbOff = V(0, -0.9, 0);
+    const E = V(B.x, B.y - 0.9, B.z);
+    const pts = aDir === "x"
+      ? [S, V(S.x - 0.6, S.y + 0.05, S.z), V((S.x + E.x) / 2, 0.22 + lift, (S.z + E.z) / 2 + sway), V(E.x + 0.15, 0.18 + lift * 0.5, E.z + 0.45), V(E.x, 0.3, E.z + 0.12), E]
+      : [S, V(S.x, 0.2, S.z + 0.35), V((S.x + E.x) / 2, 0.16 + lift, (S.z + E.z) / 2 + 0.9 + sway), V(E.x, 0.18 + lift * 0.5, E.z + 0.5), V(E.x, 0.3, E.z + 0.12), E];
+    const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.4);
+    const geo = new THREE.TubeGeometry(curve, 140, 0.055, 10, false);
+    this.total = geo.index.count;
+    this.mesh = new THREE.Mesh(geo, mat(color, { roughness: 0.45 }));
+    for (const o of [this.ha, this.hb, this.mesh]) bench.add(o);
+    this.set(0, 0, 0);
+  }
+  set(a, w, b) { // a/b = connettori (0..1), w = cavo (0..1)
+    this.ha.visible = a > 0; this.ha.position.copy(this.haPos).addScaledVector(this.haOff, 1 - ease(a));
+    this.mesh.visible = w > 0; this.mesh.geometry.setDrawRange(0, Math.floor(this.total * clamp01(w) / 60) * 60);
+    this.hb.visible = b > 0; this.hb.position.copy(this.hbPos).addScaledVector(this.hbOff, 1 - ease(b));
+  }
+}
+const WIRES = [
+  { id: "vcc",  from: "3.3V", to: "R:3V3", color: 0xe5322d, css: "#e5322d", nome: "rosso" },
+  { id: "rst",  from: "RST",  to: "R:D22", color: 0x8e5cd9, css: "#8e5cd9", nome: "viola" },
+  { id: "gnd",  from: "GND",  to: "R:GND", color: 0x2a2a2a, css: "#3a3a3a", nome: "nero" },
+  { id: "miso", from: "MISO", to: "R:D19", color: 0xf08a24, css: "#f08a24", nome: "arancione" },
+  { id: "mosi", from: "MOSI", to: "R:D23", color: 0x2fa84f, css: "#2fa84f", nome: "verde" },
+  { id: "sck",  from: "SCK",  to: "R:D18", color: 0x2f7de1, css: "#2f7de1", nome: "blu" },
+  { id: "sda",  from: "SDA",  to: "R:D5",  color: 0xf2c230, css: "#f2c230", nome: "giallo" },
+  { id: "bzp",  from: "+",    to: "R:D4",  color: 0xe8e8e8, css: "#e8e8e8", nome: "bianco", bz: true },
+  { id: "bzn",  from: "-",    to: "L:GND", color: 0x2a2a2a, css: "#3a3a3a", nome: "nero", bz: true },
+];
+WIRES.forEach((w, i) => {
+  w.obj = w.bz
+    ? new Wire({ color: w.color, a: bzLeg(w.from), b: espPinTip(w.to), aDir: "y", lift: i * 0.02, sway: w.from === "+" ? 0.5 : 0 })
+    : new Wire({ color: w.color, a: rcPinTip(w.from), b: espPinTip(w.to), aDir: "x", lift: (i % 4) * 0.04, sway: (i - 3) * 0.05 });
+});
+
+// ---------- evidenziatori ----------
+const ringM = new THREE.MeshBasicMaterial({ color: 0xf2a900, transparent: true, depthTest: false });
+const rings = [0, 1].map(() => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.035, 8, 40), ringM); r.renderOrder = 15; r.visible = false; scene.add(r); return r; });
+let tagA = null, tagB = null;
+function highlight(pa, pb, la, lb, aHoriz) {
+  for (const t of [tagA, tagB]) if (t) scene.remove(t);
+  tagA = tagB = null; rings.forEach((r) => (r.visible = false));
+  if (!pa) return;
+  rings[0].visible = rings[1].visible = true;
+  rings[0].position.copy(pa); rings[0].rotation.set(0, aHoriz ? Math.PI / 2 : 0, 0); if (!aHoriz) rings[0].rotation.x = Math.PI / 2;
+  rings[1].position.copy(pb); rings[1].rotation.set(Math.PI / 2, 0, 0);
+  tagA = label(la, { border: "#f2a900" }); tagA.position.copy(pa).add(V(0.4, 0.75, 0.2)); scene.add(tagA);
+  tagB = label(lb, { border: "#f2a900" }); tagB.position.copy(pb).add(V(0.9, 0.0, 0.3)); scene.add(tagB);
+}
+
+// ---------- etichette dei pezzi ----------
+const partTags = [
+  [label("ESP32", { h: 0.5 }), V(-2.4, 3.3, -2.9)],
+  [label("Lettore RC522", { h: 0.5 }), V(3.6, 1.0, -2.0)],
+  [label("Cicalino", { h: 0.5 }), V(-6.4, 3.5, 1.0)],
+];
+partTags.forEach(([s, p]) => { s.position.copy(p); scene.add(s); });
+
+// ---------- computer portatile ----------
+const laptop = new THREE.Group(); laptop.position.set(7.2, 0, -6.2); laptop.rotation.y = -0.45; scene.add(laptop);
+const LAP = canvasTex(1280, 800, () => {});
+let screenAnchorLap;
+{
+  const base = box(6.4, 0.25, 4.2, mat(0x8b9399, { metalness: 0.5, roughness: 0.35 })); base.position.y = 0.125; laptop.add(base);
+  const kb = box(5.6, 0.02, 2.0, mat(0x2a2f33)); kb.position.set(0, 0.26, 0.15); laptop.add(kb);
+  const lid = new THREE.Group(); lid.position.set(0, 0.25, -2.05); lid.rotation.x = -0.22; laptop.add(lid);
+  const shell = box(6.4, 4.1, 0.15, mat(0x8b9399, { metalness: 0.5, roughness: 0.35 })); shell.position.set(0, 2.05, -0.075); lid.add(shell);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 3.75), new THREE.MeshBasicMaterial({ map: LAP.tex })); scr.position.set(0, 2.05, 0.005); lid.add(scr);
+  screenAnchorLap = scr;
+  const port = box(0.05, 0.12, 0.35, mat(0x111111)); port.position.set(3.2, 0.13, 0.8); laptop.add(port);
+}
+// ---------- telefono ----------
+const phone = new THREE.Group(); phone.position.set(8.6, 0, 2.2); phone.rotation.y = -0.55; scene.add(phone);
+const PH = canvasTex(540, 1100, () => {});
+let screenAnchorPh;
+{
+  const stand = box(2.2, 0.3, 1.6, mat(0x2a2f33)); stand.position.y = 0.15; phone.add(stand);
+  const body = new THREE.Group(); body.position.set(0, 0.3, 0); body.rotation.x = -0.18; phone.add(body);
+  const shell = box(3.0, 6.1, 0.3, mat(0x1c1f22, { metalness: 0.4, roughness: 0.35 })); shell.position.set(0, 3.05, 0); body.add(shell);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.76, 5.62), new THREE.MeshBasicMaterial({ map: PH.tex })); scr.position.set(0, 3.05, 0.16); body.add(scr);
+  screenAnchorPh = scr;
+}
+
+// ---------- tessera badge ----------
+const badge = new THREE.Group(); scene.add(badge);
+{
+  const { tex } = canvasTex(680, 430, (g, w, h) => {
+    g.fillStyle = "#f6f6f2"; g.beginPath(); g.roundRect(0, 0, w, h, 34); g.fill();
+    g.fillStyle = "#123a2c"; g.fillRect(0, 0, w, 120);
+    g.fillStyle = "#f2a900"; g.font = '700 54px "IBM Plex Sans", sans-serif'; g.fillText("⛽ PRESENZE", 34, 80);
+    g.fillStyle = "#123a2c"; g.font = '600 44px "IBM Plex Sans", sans-serif'; g.fillText("Marco Rossi", 34, 230);
+    g.fillStyle = "#6b716c"; g.font = '500 32px "IBM Plex Mono", monospace'; g.fillText("5C 3F 9A 12", 34, 290);
+    g.strokeStyle = "#c7c3b8"; g.lineWidth = 6; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(560, 300, 40 + i * 28, -0.9, 0.9); g.stroke(); }
+  });
+  const side = mat(0xe8e6df);
+  const card = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 2.15), [side, side, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4 }), side, side, side]);
+  badge.add(card);
+}
+const BADGE_REST = V(4.6, 0.05, 4.6);
+badge.position.copy(BADGE_REST);
+
+scene.updateMatrixWorld(true);
+// ---------- cavi USB ----------
+function usbCable(from, to, mid) {
+  const curve = new THREE.CatmullRomCurve3([from, ...mid, to]);
+  const geo = new THREE.TubeGeometry(curve, 160, 0.09, 10, false);
+  const m = new THREE.Mesh(geo, mat(0x1d1d1d, { roughness: 0.5 })); m.userData.total = geo.index.count; scene.add(m); m.visible = false; return m;
+}
+const espUsb = esp.localToWorld(V(0, 0.2, 2.75));
+const lapPort = laptop.localToWorld(V(3.3, 0.13, 0.8));
+const cableLap = usbCable(lapPort, espUsb, [lapPort.clone().add(V(0.8, 0, 0.6)), V(4.5, 0.12, 4.2), V(0.5, 0.12, 4.6), V(-2.4, 0.4, 4.2), V(-2.4, 1.6, 3.4)]);
+const setCable = (c, k) => { c.visible = k > 0; c.geometry.setDrawRange(0, Math.floor(c.userData.total * clamp01(k) / 60) * 60); };
+
+// ---------- scatola finale ----------
+const boxg = new THREE.Group(); boxg.position.set(0.5, 0, 0.6); scene.add(boxg); boxg.visible = false;
+const BX = { w: 7.2, h: 4, d: 5.6 };
+let lid;
+{
+  const shellM = mat(0xd9dcd6, { roughness: 0.55 }), t = 0.18;
+  const floor = box(BX.w, t, BX.d, shellM); floor.position.y = t / 2; boxg.add(floor);
+  for (const [w, d, x, z] of [[BX.w, t, 0, -BX.d / 2], [BX.w, t, 0, BX.d / 2], [t, BX.d, -BX.w / 2, 0], [t, BX.d, BX.w / 2, 0]]) { const wall = box(w, BX.h, d, shellM); wall.position.set(x, BX.h / 2, z); boxg.add(wall); }
+  // pezzi dentro: ESP32 sul fondo, lettore sotto il coperchio
+  const e2 = esp.clone(); e2.position.set(-1.6, 0.85, 0.1); boxg.add(e2);
+  const r2 = rc.clone(); r2.position.set(0.3, 3.55, 0); r2.scale.setScalar(0.95); boxg.add(r2);
+  const b2 = bz.clone(); b2.position.set(2.4, -1.5, -1.5); b2.scale.setScalar(0.9); boxg.add(b2);
+  const { tex } = canvasTex(1152, 896, (g, w, h) => {
+    g.fillStyle = "#e6e8e3"; g.fillRect(0, 0, w, h);
+    g.fillStyle = "#123a2c"; g.beginPath(); g.roundRect(480, 140, 600, 600, 60); g.fill();
+    g.strokeStyle = "#f2a900"; g.lineWidth = 16; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(780, 440, 90 + i * 70, -0.8, 0.8); g.stroke(); }
+    g.fillStyle = "#fff"; g.font = '700 56px "IBM Plex Sans", sans-serif'; g.textAlign = "center"; g.fillText("Avvicina", 780, 640); g.fillText("il badge", 780, 700);
+    g.fillStyle = "#555"; for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(150 + (i % 3) * 48, 380 + Math.floor(i / 3) * 48, 12, 0, 7); g.fill(); }
+    g.fillStyle = "#123a2c"; g.font = '600 40px "IBM Plex Mono", monospace'; g.textAlign = "left"; g.fillText("PRESENZE", 80, 120);
+  });
+  lid = new THREE.Mesh(new THREE.BoxGeometry(BX.w + 0.1, 0.18, BX.d + 0.1), [shellM, shellM, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, transparent: true, opacity: 1 }), shellM, shellM, shellM]);
+  boxg.add(lid);
+}
+scene.updateMatrixWorld(true);
+const sock = new THREE.Group(); sock.position.set(-7.5, 0, 3); scene.add(sock); sock.visible = false;
+{
+  const plug = box(1.4, 1.1, 1.4, mat(0xf2f2f2, { roughness: 0.4 })); plug.position.y = 0.55; sock.add(plug);
+  const tag = label("Alimentatore USB", { h: 0.4 }); tag.position.set(0, 1.7, 0); sock.add(tag);
+}
+const cableSock = usbCable(V(-6.8, 0.5, 3), boxg.localToWorld(V(-BX.w / 2, 0.6, 1.5)), [V(-5.6, 0.12, 3.2), V(-4.2, 0.12, 2.3)]);
+
+// ---------- bip ----------
+const beepRings = [0, 1, 2, 3].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 48), new THREE.MeshBasicMaterial({ color: 0xf2a900, transparent: true, side: THREE.DoubleSide, depthTest: false })); m.renderOrder = 16; m.visible = false; scene.add(m); return m; });
+let beeps = []; // {t0, dur, at}
+let actx = null;
+function sound(start, dur) {
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = "square"; o.frequency.value = 2400; g.gain.value = 0.04;
+    o.connect(g).connect(actx.destination);
+    const t = actx.currentTime + start; o.start(t); o.stop(t + dur);
+  } catch {}
+}
+function beep(at, count, dur) { // dur in secondi
+  const now = clock.elapsedTime;
+  for (let i = 0; i < count; i++) { const s = i * (dur + 0.12); beeps.push({ t0: now + s, dur: Math.max(dur, 0.35), at: at.clone() }); sound(s, dur); }
+}
+
+// ---------- schermi ----------
+function rr(g, x, y, w, h, r, fill, stroke) { g.beginPath(); g.roundRect(x, y, w, h, r); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = 3; g.stroke(); } }
+function txt(g, s, x, y, { size = 30, w = 500, c = "#1b1f1c", f = "IBM Plex Sans", al = "left" } = {}) { g.font = `${w} ${size}px "${f}", sans-serif`; g.fillStyle = c; g.textAlign = al; g.textBaseline = "alphabetic"; g.fillText(s, x, y); }
+function drawLaptop(mode, p = 0) {
+  const { g, c, tex } = LAP, W = c.width, H = c.height;
+  g.fillStyle = "#1e1f22"; g.fillRect(0, 0, W, H);
+  if (mode === "off") { tex.needsUpdate = true; return; }
+  g.fillStyle = "#2b2d31"; g.fillRect(0, 0, W, 56);
+  txt(g, "Arduino IDE 2", 24, 38, { size: 24, w: 600, c: "#cfd3d8" });
+  g.fillStyle = "#17181a"; g.fillRect(0, 56, 70, H);
+  ["▤", "⌗", "📚", "⌕"].forEach((ic, i) => txt(g, ic, 35, 110 + i * 70, { size: 30, c: (mode === "ide" && (i === 1 || i === 2)) ? "#f2a900" : "#8a8f96", al: "center" }));
+  if (mode === "ide") {
+    const items = [
+      ["1", "Scarica e installa Arduino IDE", "arduino.cc/en/software → Download (Windows o Mac)"],
+      ["2", "Gestore schede (seconda icona a sinistra)", "Cerca  esp32  →  Installa “esp32 di Espressif Systems”"],
+      ["3", "Gestione librerie (icona dei libri)", "Cerca  MFRC522  →  Installa “MFRC522 di GithubCommunity”"],
+    ];
+    items.forEach(([n, t, d], i) => {
+      const y = 110 + i * 215, on = p >= i;
+      rr(g, 110, y, 1120, 180, 18, on ? "#26332f" : "#25272b", on ? "#f2a900" : null);
+      rr(g, 140, y + 40, 70, 70, 35, on ? "#f2a900" : "#3a3d42"); txt(g, n, 175, y + 88, { size: 40, w: 700, c: "#1d1600", al: "center" });
+      txt(g, t, 240, y + 72, { size: 38, w: 600, c: "#eef1f3" });
+      txt(g, d, 240, y + 128, { size: 30, w: 500, c: "#b5bcc2", f: "IBM Plex Mono" });
+    });
+  } else if (mode === "code") {
+    const L = [
+      ["// ===== DA COMPILARE PER OGNI IMPIANTO =====", "#7d8590"],
+      ['const char* WIFI_NOME     = "Distributore-WiFi";', "#e6edf3", 1],
+      ['const char* WIFI_PASSWORD = "la-tua-password";', "#e6edf3", 1],
+      ['const char* CHIAVE        = "k7m2xq9fh3tnc8vw2pdr";', "#e6edf3", 1],
+      ['const char* SITO          = "https://…netlify.app";', "#7d8590"],
+      ["// ===========================================", "#7d8590"],
+      ["", ""], ["#define PIN_SS   5", "#79c0ff"], ["#define PIN_RST  22", "#79c0ff"], ["#define PIN_BUZ  4", "#79c0ff"],
+    ];
+    txt(g, "LettoreBadge.ino", 100, 100, { size: 26, w: 600, c: "#f2a900", f: "IBM Plex Mono" });
+    L.forEach(([s, col, hi], i) => {
+      const y = 170 + i * 58;
+      if (hi) rr(g, 90, y - 42, 1170, 56, 8, "rgba(242,169,0,.18)", "#f2a900");
+      txt(g, String(33 + i).padStart(2, " "), 130, y, { size: 26, c: "#5b6168", f: "IBM Plex Mono", al: "right" });
+      txt(g, s, 160, y, { size: 30, c: col, f: "IBM Plex Mono" });
+    });
+    txt(g, "Cambia solo le 3 righe evidenziate", 160, 760, { size: 30, w: 600, c: "#f2a900" });
+  } else if (mode === "upload") {
+    rr(g, 90, 76, 70, 56, 10, "#2b2d31"); txt(g, "✓", 125, 116, { size: 32, c: "#cfd3d8", al: "center" });
+    rr(g, 175, 76, 70, 56, 10, p > 0 ? "#f2a900" : "#2b2d31"); txt(g, "→", 210, 116, { size: 34, w: 700, c: p > 0 ? "#1d1600" : "#cfd3d8", al: "center" });
+    rr(g, 270, 76, 560, 56, 10, "#2b2d31"); txt(g, "ESP32 Dev Module · COM3", 295, 113, { size: 28, c: "#e6edf3", f: "IBM Plex Mono" });
+    g.fillStyle = "#151617"; g.fillRect(70, 400, W - 70, H - 400);
+    txt(g, "Output", 100, 445, { size: 24, w: 600, c: "#9aa0a6" });
+    const lines = [];
+    if (p > 0) lines.push("Connecting.......");
+    if (p > 0.15) lines.push(`Writing at 0x000${Math.floor(10 + p * 80)}000... (${Math.min(100, Math.round((p - 0.15) / 0.75 * 100))} %)`);
+    if (p >= 0.9) lines.push("Hard resetting via RTS pin...");
+    if (p >= 1) lines.push("── Monitor seriale (115200) ──", "Lettore RC522 versione: 0x92", "Connessione al WiFi.... collegato!");
+    lines.forEach((s, i) => txt(g, s, 100, 500 + i * 46, { size: 28, c: s.includes("0x92") || s.includes("collegato") ? "#7ee2a8" : "#d7dce1", f: "IBM Plex Mono" }));
+    rr(g, 100, 200, 1080, 34, 17, "#2b2d31"); rr(g, 100, 200, 1080 * clamp01(p), 34, 17, "#f2a900");
+    txt(g, p >= 1 ? "Caricamento completato." : p > 0 ? "Caricamento…" : "Premi → Carica", 100, 300, { size: 36, w: 600, c: p >= 1 ? "#7ee2a8" : "#eef1f3" });
+  }
+  tex.needsUpdate = true;
+}
+function phoneFrame(g, W, H, title) {
+  g.fillStyle = "#f3f1ea"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "#123a2c"; g.fillRect(0, 0, W, 130);
+  txt(g, "⛽ Presenze", 30, 95, { size: 38, w: 650, c: "#fff" });
+  txt(g, title, 30, 200, { size: 40, w: 700 });
+}
+function drawPhone(mode) {
+  const { g, c, tex } = PH, W = c.width, H = c.height;
+  if (mode === "off") { g.fillStyle = "#0b0d0e"; g.fillRect(0, 0, W, H); tex.needsUpdate = true; return; }
+  if (mode === "key") {
+    phoneFrame(g, W, H, "Modifica impianto");
+    txt(g, "Nome", 30, 270, { size: 24, w: 600, c: "#6b716c" }); rr(g, 30, 285, W - 60, 70, 14, "#fff", "#e4e1d8"); txt(g, "Impianto 3", 50, 332, { size: 30 });
+    rr(g, 30, 400, W - 60, 470, 20, "#efede6");
+    txt(g, "🪪 Chiave del lettore badge", 55, 460, { size: 30, w: 700 });
+    txt(g, "Copiala nel programma (riga CHIAVE)", 55, 505, { size: 24, c: "#6b716c" });
+    rr(g, 55, 535, W - 110, 74, 12, "#fff", "#f2a900"); txt(g, "k7m2xq9fh3tnc8vw2pdr", 75, 584, { size: 28, f: "IBM Plex Mono" });
+    rr(g, 55, 640, 150, 66, 12, "#f2a900"); txt(g, "Copia", 130, 684, { size: 28, w: 650, c: "#1d1600", al: "center" });
+    rr(g, 220, 640, 230, 66, 12, "#fff", "#e4e1d8"); txt(g, "Genera nuova", 335, 684, { size: 26, w: 600, al: "center" });
+    txt(g, "Tocca Copia, poi Salva", 55, 790, { size: 26, w: 600, c: "#b45309" });
+    rr(g, W - 210, H - 130, 180, 80, 14, "#123a2c"); txt(g, "Salva", W - 120, H - 78, { size: 32, w: 650, c: "#fff", al: "center" });
+  } else if (mode === "unknown" || mode === "ok") {
+    phoneFrame(g, W, H, "Oggi");
+    const k = mode === "ok" ? [["9", "#17803d", "Puntuali"], ["0", "#b45309", "In ritardo"]] : [["8", "#17803d", "Puntuali"], ["0", "#b45309", "In ritardo"]];
+    k.forEach(([n, col, l], i) => { rr(g, 30 + i * 250, 240, 230, 130, 16, "#fff", "#e4e1d8"); txt(g, n, 55 + i * 250, 310, { size: 52, w: 700, c: col }); txt(g, l, 55 + i * 250, 350, { size: 24, w: 600, c: "#6b716c" }); });
+    if (mode === "unknown") {
+      rr(g, 30, 400, W - 60, 260, 16, "#fdf0dc"); g.fillStyle = "#b45309"; g.fillRect(30, 400, 8, 260);
+      txt(g, "🪪 Badge non associati (1)", 60, 460, { size: 30, w: 700 });
+      txt(g, "Badge 5C 3F 9A 12", 60, 520, { size: 28, w: 700, f: "IBM Plex Mono" });
+      txt(g, "letto a Impianto 3 · 05:58", 60, 565, { size: 26, c: "#4b514c" });
+      txt(g, "Vai su Dipendenti per assegnarlo", 60, 625, { size: 24, c: "#b45309", w: 600 });
+    } else {
+      rr(g, 30, 400, W - 60, 220, 16, "#fff", "#e4e1d8");
+      txt(g, "Marco Rossi", 60, 465, { size: 32, w: 700 });
+      txt(g, "Impianto 3 · turno 06:00", 60, 510, { size: 25, c: "#6b716c" });
+      txt(g, "entrato 05:58 🪪", 60, 555, { size: 25, c: "#6b716c" });
+      rr(g, W - 230, 440, 180, 54, 27, "#e5f4ea"); txt(g, "Puntuale", W - 140, 477, { size: 26, w: 700, c: "#17803d", al: "center" });
+    }
+  } else if (mode === "assign") {
+    phoneFrame(g, W, H, "Modifica dipendente");
+    txt(g, "Nome e cognome", 30, 270, { size: 24, w: 600, c: "#6b716c" }); rr(g, 30, 285, W - 60, 70, 14, "#fff", "#e4e1d8"); txt(g, "Marco Rossi", 50, 332, { size: 30 });
+    txt(g, "Codice badge", 30, 410, { size: 24, w: 600, c: "#6b716c" }); rr(g, 30, 425, W - 60, 70, 14, "#fff", "#f2a900"); txt(g, "5C3F9A12", 50, 472, { size: 30, f: "IBM Plex Mono" });
+    txt(g, "Badge letti di recente, tocca per assegnare:", 30, 545, { size: 22, c: "#6b716c" });
+    rr(g, 30, 565, W - 60, 70, 14, "#fff7e6", "#f2a900"); txt(g, "🪪 5C 3F 9A 12 · Impianto 3", 50, 610, { size: 26, w: 600 });
+    rr(g, W - 210, H - 130, 180, 80, 14, "#123a2c"); txt(g, "Salva", W - 120, H - 78, { size: 32, w: 650, c: "#fff", al: "center" });
+  }
+  tex.needsUpdate = true;
+}
+drawLaptop("off"); drawPhone("off");
+
+// ---------- passi ----------
+const camFor = (obj, dist = 6.5, up = 0.6) => {
+  const p = new THREE.Vector3(), n = V(0, 0, 1); obj.getWorldPosition(p);
+  n.applyQuaternion(obj.getWorldQuaternion(new THREE.Quaternion()));
+  return { p: p.clone().addScaledVector(n, dist).add(V(0, up, 0)), t: p };
+};
+scene.updateMatrixWorld(true);
+const CAM = {
+  all: { p: V(1, 12, 14), t: V(0.5, 1, 0) },
+  parts: { p: V(-1.5, 8.5, 9.5), t: V(-1, 1.3, 0) },
+  wire: { p: V(0.6, 6.2, 7.2), t: V(-0.8, 1.0, 0.4) },
+  buzz: { p: V(-4.2, 5.8, 8.2), t: V(-4.2, 1.2, 0.8) },
+  check: { p: V(-0.5, 9, 10.5), t: V(-0.8, 1, 0.3) },
+  lap: camFor(screenAnchorLap, 8.5, 0.3),
+  ph: camFor(screenAnchorPh, 9, 0.3),
+  upload: { p: V(2.5, 9.5, 12.5), t: V(2.2, 1.5, -1.8) },
+  badge: { p: V(4.5, 12.5, 18.5), t: V(3.6, 1.4, 0.8) },
+  box: { p: V(4.5, 12, 18), t: V(2.6, 1.6, 1.2) },
+};
+const wireStep = (i, extra) => ({ kind: "wire", wire: i, cam: WIRES[i].bz ? "buzz" : "wire", ...extra });
+const STEPS = [
+  { kicker: "Prima di iniziare", title: "Cosa ti serve", cam: "all", tags: true, html: `
+    <ul>
+      <li><b>ESP32 DevKit V1 a 30 pin</b>, con i pin già saldati</li>
+      <li><b>Lettore RFID RC522</b>: nella confezione ci sono già una tessera e un portachiavi</li>
+      <li><b>Cicalino attivo</b> (buzzer attivo, quello con l'adesivo sopra)</li>
+      <li><b>9 cavetti dupont femmina–femmina</b> da 10–20 cm, di colori diversi</li>
+      <li><b>Cavo USB dati</b> adatto alla presa della scheda, e un <b>alimentatore USB</b> da telefono</li>
+      <li>Una <b>scatola di plastica</b> di circa 8×6×4 cm e una tessera badge per ogni dipendente</li>
+      <li>Un computer (Windows o Mac), solo per caricare il programma</li>
+    </ul>
+    <p class="tip">Trascina con un dito per ruotare la scena, pizzica per avvicinarti. Premi <b>Avanti</b> per cominciare.</p>` },
+  { kicker: "Passo 1", title: "Riconosci i pezzi e i pin", cam: "parts", tags: true, html: `
+    <p>Tieni l'<b>ESP32</b> con il rettangolo argentato in alto e la presa USB verso di te. I nomi dei pin sono stampati sopra la scheda; i pin escono <b>sotto</b>, quindi i cavetti si infilano da sotto.</p>
+    <p>Sul <b>lettore</b> i pin sono sul lato corto, da <b class="k">SDA</b> a <b class="k">3.3V</b>.</p>
+    <p class="tip">Nella scena i pezzi sono sollevati per vedere bene i collegamenti. Tu puoi appoggiare l'ESP32 su due tappi o due gomme.</p>
+    <p class="warn">Fai tutti i collegamenti con la scheda <b>scollegata</b> dal computer e dalla corrente.</p>` },
+  wireStep(0, { kicker: "Cavo 1 di 9", title: "Alimentazione del lettore", note: `<p class="warn">Usa il pin <b>3V3</b>, mai <b>VIN</b>: a 5 volt il lettore si rovina.</p>` }),
+  wireStep(1, { kicker: "Cavo 2 di 9", title: "Reset del lettore", note: `<p>D22 è il secondo pin dall'alto sul lato destro.</p>` }),
+  wireStep(2, { kicker: "Cavo 3 di 9", title: "Massa (il meno)", note: `<p>Usa il <b>GND sul lato destro</b>, accanto a 3V3. Il pin <b class="k">IRQ</b> del lettore resta libero: non va collegato.</p>` }),
+  wireStep(3, { kicker: "Cavo 4 di 9", title: "Dati dal lettore", note: `<p>D19 è il sesto pin dall'alto a destra.</p>` }),
+  wireStep(4, { kicker: "Cavo 5 di 9", title: "Dati verso il lettore", note: `<p>D23 è il primo pin in alto a destra, vicino all'antenna.</p>` }),
+  wireStep(5, { kicker: "Cavo 6 di 9", title: "Orologio della comunicazione", note: `<p>D18 è subito sotto D19.</p>` }),
+  wireStep(6, { kicker: "Cavo 7 di 9", title: "Selezione del lettore", note: `<p>Su il lettore <b class="k">SDA</b> è il primo pin. Con questo cavo il lettore è collegato.</p>` }),
+  wireStep(7, { kicker: "Cavo 8 di 9", title: "Cicalino: il più", note: `<p>Il polo <b>+</b> del cicalino è la <b>gamba più lunga</b>, dal lato del <b>+</b> sull'adesivo.</p>` }),
+  wireStep(8, { kicker: "Cavo 9 di 9", title: "Cicalino: il meno", note: `<p>Usa il <b>GND sul lato sinistro</b>, accanto a VIN.</p>` }),
+  { kicker: "Passo 2", title: "Controlla tutti i collegamenti", cam: "check", all: true, html: () => `
+    <table>${WIRES.map(w => `<tr><td><span class="dot" style="display:inline-block;background:${w.css}"></span></td><td>${w.bz ? "Cicalino " + (w.from === "+" ? "+" : "−") : "RC522 " + w.from}</td><td class="arrow">→</td><td>ESP32 ${w.to.slice(2)}${w.to === "L:GND" ? " (sinistra)" : w.to === "R:GND" ? " (destra)" : ""}</td></tr>`).join("")}</table>
+    <p class="tip">Tira leggermente ogni cavetto: deve restare fermo. Un cavetto che balla è la causa più comune di problemi.</p>` },
+  { kicker: "Passo 3 · sul computer", title: "Installa Arduino IDE", cam: "lap", screen: "ide", html: `
+    <ol>
+      <li>Scarica <b>Arduino IDE</b> da <span class="mono">arduino.cc/en/software</span> e installalo.</li>
+      <li>Apri il <b>Gestore schede</b> (seconda icona a sinistra), cerca <b class="k">esp32</b> e installa quella di <b>Espressif Systems</b>.</li>
+      <li>Apri <b>Gestione librerie</b> (icona dei libri), cerca <b class="k">MFRC522</b> e installa quella di <b>GithubCommunity</b>.</li>
+    </ol>
+    <p class="tip">Lo fai una volta sola: poi programmi tutti i lettori dallo stesso computer.</p>` },
+  { kicker: "Passo 4 · sul sito", title: "Crea la chiave dell'impianto", cam: "ph", phone: "key", html: `
+    <p>Dal telefono entra nel sito come <b>Titolare</b> → <b>Impianti</b> → <b>Modifica</b> sull'impianto dove metterai il lettore.</p>
+    <p>Nel riquadro <b>Chiave del lettore badge</b> tocca <b>Crea chiave</b>, poi <b>Copia</b>, poi <b>Salva</b>.</p>
+    <p class="tip">Ogni impianto ha la sua chiave: così il sito sa da quale distributore arriva la timbratura. Mandatela via mail o WhatsApp per incollarla sul computer.</p>` },
+  { kicker: "Passo 5 · sul computer", title: "Prepara il programma", cam: "lap", screen: "code", copy: true, html: `
+    <p>In Arduino IDE: <b>File → Nuovo</b>, cancella tutto e incolla il programma (tasto qui sotto).</p>
+    <p>Cambia solo le <b>3 righe evidenziate</b>: nome del Wi-Fi dell'impianto, password del Wi-Fi e la chiave copiata al passo 4. L'indirizzo del sito è già giusto.</p>
+    <p class="tip">Salva un file per ogni impianto, ad esempio <span class="mono">Lettore-Impianto3</span>.</p>` },
+  { kicker: "Passo 6 · sul computer", title: "Carica il programma sull'ESP32", cam: "upload", screen: "upload", upload: true, html: `
+    <ol>
+      <li>Collega l'ESP32 al computer con il cavo USB.</li>
+      <li><b>Strumenti → Scheda</b> → <b>ESP32 Dev Module</b>.</li>
+      <li><b>Strumenti → Porta</b> → quella comparsa ora (COM3 o simile su Windows, <span class="mono">usbserial</span> su Mac).</li>
+      <li>Premi la freccia <b>→ Carica</b>. Alla fine senti <b>due bip</b>: è pronto.</li>
+    </ol>
+    <p class="tip">Se resta fermo su <span class="mono">Connecting…</span>, tieni premuto il tasto <b>BOOT</b> sulla scheda per 2 secondi.</p>
+    <p>Controllo: apri <b>Monitor seriale</b> a 115200. Se leggi <span class="mono">versione: 0x92</span> (o 0x91) il lettore è collegato bene; se leggi 0x00 o 0xFF ricontrolla i cavi.</p>` },
+  { kicker: "Passo 7", title: "Registra i badge dei dipendenti", cam: "badge", tap: "unknown", html: `
+    <p>Passa una tessera sul lettore: sentirai <b>3 bip</b>. È normale: il badge non è ancora assegnato a nessuno.</p>
+    <p>Sul telefono, in <b>Oggi</b>, compare <b>Badge non associati</b>. Vai su <b>Dipendenti → Modifica</b> sul dipendente, tocca il badge appena letto e premi <b>Salva</b>.</p>
+    <p class="tip">Fai un badge alla volta e scrivici sopra il nome con un pennarello.</p>` },
+  { kicker: "Passo 8", title: "Chiudi tutto nella scatola", cam: "box", boxScene: true, closeBox: true, html: `
+    <p>Scollega dal computer. Metti l'ESP32 sul fondo e il lettore <b>appoggiato sotto il coperchio</b>, con la parte stampata verso l'alto: legge attraverso 2–3 mm di plastica.</p>
+    <p>Fai un foro per il cavo USB e qualche forellino sopra il cicalino. Collega il cavo all'alimentatore USB e fissa la scatola al muro, vicino alla cassa.</p>
+    <p class="warn">Il lettore non legge attraverso il metallo: niente scatole metalliche, e tienilo lontano da pioggia e fonti di calore.</p>` },
+  { kicker: "Passo 9", title: "Prova finale", cam: "box", boxScene: true, tap: "ok", html: `
+    <p>Avvicina il badge al coperchio:</p>
+    <ul>
+      <li><b>1 bip lungo</b>: timbratura registrata. La vedi subito in dashboard con il simbolo 🪪.</li>
+      <li><b>2 bip corti</b>: manca internet. La timbratura resta in memoria e parte appena torna la rete, se il lettore resta acceso.</li>
+      <li><b>3 bip corti</b>: badge non assegnato a nessun dipendente.</li>
+    </ul>
+    <p class="tip">Ripeti dal passo 4 per ogni impianto: chiave nuova, stesso programma.</p>` },
+];
+
+// ---------- interfaccia ----------
+const panel = document.getElementById("panel");
+let lastScreen = "";
+let cur = 0, t0 = 0, camFrom = null, camTo = null, camT = 1, phoneSeq = [];
+const sketch = document.getElementById("sketch").textContent;
+
+function wireConn(w) {
+  const a = w.bz ? `Cicalino <b>${w.from === "+" ? "+" : "−"}</b>` : `RC522 <b>${w.from}</b>`;
+  const b = `ESP32 <b>${w.to.slice(2)}</b>${w.to === "L:GND" ? ' <span class="dev">(sinistra)</span>' : w.to === "R:GND" ? ' <span class="dev">(destra)</span>' : ""}`;
+  return `<div class="conn"><span class="dot" style="background:${w.css}"></span><span class="dev">cavo ${w.nome}</span><span>${a}</span><span class="arrow">→</span><span>${b}</span></div>`;
+}
+function renderPanel() {
+  const s = STEPS[cur];
+  const html = typeof s.html === "function" ? s.html() : s.html || "";
+  panel.innerHTML = `
+    <div class="prog" role="tablist">${STEPS.map((_, i) => `<button aria-label="Vai al passo ${i + 1}" data-go="${i}" class="${i < cur ? "on" : i === cur ? "cur" : ""}"></button>`).join("")}</div>
+    <div class="kicker">${s.kicker}</div>
+    <h1>${s.title}</h1>
+    <div class="body">
+      ${s.kind === "wire" ? wireConn(WIRES[s.wire]) + `<p>Infila un capo sul pin del ${WIRES[s.wire].bz ? "cicalino" : "lettore"} e l'altro sul pin dell'ESP32 indicato. Spingi fino in fondo.</p>` + (s.note || "") : html}
+      ${s.copy ? `<button class="sm" id="copyBtn">📋 Copia il programma</button>` : ""}
+    </div>
+    <div class="nav">
+      <button id="prev" ${cur === 0 ? "disabled" : ""}>Indietro</button>
+      <button id="replay" title="Rivedi l'animazione">↻</button>
+      <button class="pri" id="next">${cur === STEPS.length - 1 ? "Ricomincia" : "Avanti"}</button>
+    </div>`;
+  panel.scrollTop = 0;
+}
+panel.addEventListener("click", async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.go) go(+b.dataset.go);
+  else if (b.id === "prev") go(cur - 1);
+  else if (b.id === "next") go(cur === STEPS.length - 1 ? 0 : cur + 1);
+  else if (b.id === "replay") go(cur);
+  else if (b.id === "copyBtn") {
+    try { await navigator.clipboard.writeText(sketch); flash("Programma copiato"); } catch { flash("Copia non riuscita: seleziona il testo dal file"); }
+  }
+});
+addEventListener("keydown", (e) => { if (e.key === "ArrowRight") go(Math.min(STEPS.length - 1, cur + 1)); if (e.key === "ArrowLeft") go(Math.max(0, cur - 1)); });
+function flash(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; stage.appendChild(t); setTimeout(() => t.remove(), 2200); }
+
+function go(i) {
+  cur = i; t0 = clock.elapsedTime; beeps = []; phoneSeq = []; lastScreen = "";
+  const s = STEPS[i];
+  const box = !!s.boxScene;
+  bench.visible = !box; boxg.visible = box; sock.visible = box;
+  partTags.forEach(([sp]) => (sp.visible = !!s.tags));
+  // cavi
+  WIRES.forEach((w, k) => {
+    const done = s.all || box || s.kind !== "wire" ? cur >= 11 : k < s.wire;
+    w.obj.set(done ? 1 : 0, done ? 1 : 0, done ? 1 : 0);
+  });
+  if (s.kind === "wire") {
+    const w = WIRES[s.wire];
+    highlight(w.bz ? bzLeg(w.from) : rcPinTip(w.from), espPinTip(w.to), w.bz ? `cicalino ${w.from === "+" ? "+" : "−"}` : w.from, w.to.slice(2), !w.bz);
+  } else highlight(null);
+  setCable(cableLap, 0); cableLap.visible = false; setCable(cableSock, 0);
+  badge.position.copy(BADGE_REST); badge.rotation.set(0, 0, 0); badge.visible = !!s.tap || cur === 0;
+  if (box) badge.position.set(6.8, 0.05, 4.2);
+  lid.position.set(0, BX.h + 0.09, 0); lid.rotation.set(0, 0, 0); lid.material[2].opacity = 1;
+  drawLaptop(s.screen || (cur >= 12 && cur <= 15 ? "ide" : "off"), s.screen === "ide" ? 2 : 0);
+  if (s.screen === "ide") drawLaptop("ide", -1);
+  drawPhone(s.phone || (cur >= 13 ? "ok" : "off"));
+  if (s.tap === "unknown") drawPhone("ok");
+  if (s.tap === "ok") drawPhone("unknown");
+  // telecamera
+  camFrom = { p: camera.position.clone(), t: controls.target.clone() };
+  const c = CAM[s.cam], far = ["all", "badge", "box", "ph", "lap", "upload"].includes(s.cam), f = camera.aspect < 0.9 ? (far ? 1.15 : 1.6) : 1;
+  camTo = { t: c.t.clone(), p: c.t.clone().add(c.p.clone().sub(c.t).multiplyScalar(f)) }; camT = reduceMotion ? 1 : 0;
+  renderPanel();
+}
+
+// ---------- animazione ----------
+const clock = new THREE.Clock();
+function update() {
+  const now = clock.elapsedTime, t = now - t0, s = STEPS[cur];
+  if (camT < 1) {
+    camT = Math.min(1, camT + clock.getDelta() / 1.3 + 0.012);
+    const k = ease(camT);
+    camera.position.lerpVectors(camFrom.p, camTo.p, k);
+    controls.target.lerpVectors(camFrom.t, camTo.t, k);
+  } else clock.getDelta();
+  // cavo del passo corrente
+  if (s.kind === "wire") {
+    const w = WIRES[s.wire].obj, sp = reduceMotion ? 10 : 1;
+    w.set(clamp01((t - 0.4) * 2 * sp), clamp01((t - 0.9) / 1.6 * sp), clamp01((t - 2.6) * 2.5 * sp));
+  }
+  rings.forEach((r, i) => { if (r.visible) { const k = 1 + 0.25 * Math.sin(now * 6 + i); r.scale.setScalar(k); } });
+  // passo 3 (IDE): evidenzia una voce alla volta
+  if (s.screen === "ide") { const k = Math.min(2, Math.floor(t / 1.6)); const key = "ide" + k; if (key !== lastScreen) { drawLaptop("ide", k); lastScreen = key; } }
+  // caricamento programma
+  if (s.upload) {
+    setCable(cableLap, clamp01((t - 0.3) / 1.4));
+    const p = clamp01((t - 2.2) / 4.5);
+    const key = "up" + Math.round(p * 40);
+    if (key !== lastScreen) { drawLaptop("upload", t < 2.2 ? 0 : p); lastScreen = key; }
+    if (p >= 1 && !s._beeped) { s._beeped = t0; beep(bzLeg("+").add(V(0, 1.8, 0)), 2, 0.1); }
+    if (s._beeped !== t0 && p < 1) s._beeped = null;
+  }
+  // tessera sul lettore
+  if (s.tap) {
+    const box = !!s.boxScene;
+    const target = box ? boxg.localToWorld(V(1.2, BX.h + 0.5, 0)) : rc.localToWorld(V(1.1, 0.7, 0));
+    const from = box ? V(6.8, 0.05, 4.2) : BADGE_REST;
+    const kIn = ease((t - 0.8) / 1.2), kOut = ease((t - 4.2) / 1.2);
+    badge.position.lerpVectors(from, target, kIn - kOut);
+    badge.position.y += Math.sin(Math.PI * clamp01(kIn - kOut)) * 1.2;
+    badge.rotation.z = -0.15 * (kIn - kOut);
+    if (t > 2.1 && !s._tap) {
+      s._tap = true;
+      const at = box ? boxg.localToWorld(V(-2.2, BX.h + 1.2, -1.2)) : bzLeg("+").add(V(0, 1.8, 0));
+      if (s.tap === "unknown") beep(at, 3, 0.1); else beep(at, 1, 0.45);
+    }
+    if (t < 2) s._tap = false;
+    const want = s.tap === "unknown" ? (t < 2.6 ? "ok" : t < 5.4 ? "unknown" : "assign") : (t < 2.6 ? "unknown" : "ok");
+    if (want !== lastScreen) { drawPhone(want); lastScreen = want; }
+  }
+  // chiusura scatola
+  if (s.closeBox) {
+    const k = ease((t - 0.6) / 1.6);
+    lid.position.set(0, BX.h + 0.09 + (1 - k) * 3.2, -(1 - k) * 1.5); lid.rotation.x = -(1 - k) * 0.6;
+    lid.material[2].opacity = 0.35 + 0.65 * k;
+    setCable(cableSock, clamp01((t - 2.4) / 1.2));
+    if (t > 3.8 && !s._on) { s._on = true; beep(boxg.localToWorld(V(-2.2, BX.h + 1.2, -1.2)), 2, 0.08); }
+    if (t < 3.7) s._on = false;
+  } else if (s.boxScene) setCable(cableSock, 1);
+  // anelli del bip
+  beepRings.forEach((r) => (r.visible = false));
+  beeps = beeps.filter((b) => now - b.t0 < b.dur + 0.6);
+  beeps.slice(-4).forEach((b, i) => {
+    const k = (now - b.t0) / (b.dur + 0.6); if (k < 0) return;
+    const r = beepRings[i]; r.visible = true; r.position.copy(b.at); r.lookAt(camera.position);
+    r.scale.setScalar(0.6 + k * 2.2); r.material.opacity = 1 - k;
+  });
+}
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  camera.fov = w / h < 0.9 ? 55 : 40; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+renderer.setAnimationLoop(() => { update(); controls.update(); renderer.render(scene, camera); });
+document.fonts?.ready.then(() => { /* ridisegna gli schermi con i caratteri caricati */ lastScreen = ""; go(cur); });
+go(0);
+</script>
+</body>
+</html>

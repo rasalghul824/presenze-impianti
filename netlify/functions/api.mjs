@@ -1,6 +1,6 @@
 // API principale: login, timbratura, dati per la dashboard
 import {
-  json, romeNow, addDays, evaluate, getConfig, saveConfig, getMonth, saveMonth, validateConfig,
+  getJSON, setJSON, json, romeNow, addDays, evaluate, getConfig, saveConfig, getMonth, saveMonth, validateConfig,
   signToken, verifyToken, env, safeEqual, telegram, telegramEnabled, escHtml,
 } from "../lib/core.mjs";
 
@@ -16,6 +16,7 @@ export default async (req) => {
     const body = method === "POST" ? await req.json().catch(() => ({})) : {};
 
     if (path === "/login" && method === "POST") return await login(body);
+    if (path === "/device/checkin" && method === "POST") return await deviceCheckin(body);
 
     const auth = verifyToken((req.headers.get("authorization") || "").replace(/^Bearer /, ""));
     if (!auth) return json({ error: "Sessione scaduta, accedi di nuovo" }, 401);
@@ -35,6 +36,10 @@ export default async (req) => {
         const err = validateConfig(cfg);
         if (err) return json({ error: err }, 400);
         await saveConfig(cfg);
+        // toglie dalla lista "badge sconosciuti" quelli appena assegnati
+        const assigned = new Set(cfg.employees.map((e) => String(e.badge || "").toUpperCase()).filter(Boolean));
+        const unknown = await getJSON("unknown-badges", []);
+        if (unknown.some((u) => assigned.has(u.uid))) await setJSON("unknown-badges", unknown.filter((u) => !assigned.has(u.uid)));
         return json({ ok: true });
       }
       if (path === "/admin/justify" && method === "POST") return await justify(body);
@@ -112,7 +117,36 @@ async function adminData(url) {
   const jobs = [];
   for (const e of cfg.employees) for (const ym of months) jobs.push(getMonth(e.id, ym).then((m) => Object.values(m).map((r) => ({ ...r, empId: e.id }))));
   const checkins = (await Promise.all(jobs)).flat().filter((r) => r.date >= from);
-  return json({ config: cfg, checkins, now, telegram: telegramEnabled() });
+  const unknownBadges = await getJSON("unknown-badges", []);
+  return json({ config: cfg, checkins, now, telegram: telegramEnabled(), unknownBadges });
+}
+
+// Timbratura da lettore badge fisso nell'impianto
+async function deviceCheckin(body) {
+  const key = String(body.key || "").trim();
+  const uid = String(body.uid || "").toUpperCase().replace(/[^0-9A-F]/g, "");
+  if (!key || uid.length < 4) return json({ error: "Dati mancanti" }, 400);
+  const cfg = await getConfig();
+  const station = cfg.stations.find((s) => s.deviceKey && safeEqual(s.deviceKey, key));
+  if (!station) { await sleep(500); return json({ error: "Chiave lettore non valida" }, 401); }
+  // "ago" = secondi passati dalla lettura (timbrature rimaste in coda senza internet)
+  const ago = Math.min(Math.max(0, Number(body.ago) || 0), 12 * 3600);
+  const now = romeNow(new Date(Date.now() - ago * 1000));
+  const emp = cfg.employees.find((e) => e.badge && String(e.badge).toUpperCase() === uid);
+  if (!emp) {
+    const list = (await getJSON("unknown-badges", [])).filter((x) => x.uid !== uid);
+    list.unshift({ uid, stationId: station.id, at: `${now.date} ${now.time.slice(0, 5)}` });
+    await setJSON("unknown-badges", list.slice(0, 20));
+    return json({ ok: false, unknown: true, uid }, 404);
+  }
+  const ym = now.date.slice(0, 7);
+  const month = await getMonth(emp.id, ym);
+  if (month[now.date]?.time) return json({ ok: true, already: true, name: emp.name, time: month[now.date].time });
+  const rec = { ...(month[now.date] || {}), ...evaluate(emp, station, now, station.lat, station.lng, 0), source: "badge" };
+  month[now.date] = rec;
+  await saveMonth(emp.id, ym, month);
+  if (rec.late) await telegram(`⏰ <b>${escHtml(emp.name)}</b> è arrivato in ritardo di <b>${rec.delay} min</b>\n${escHtml(station.name)} · turno ${rec.shift}, badge alle ${rec.time}`);
+  return json({ ok: true, name: emp.name, time: rec.time, late: rec.late, delay: rec.delay });
 }
 
 async function justify(body) {
